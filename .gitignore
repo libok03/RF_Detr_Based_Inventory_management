@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
+
+# Model weights and datasets
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.engine
+*.zip
+*.tar
+*.tar.gz
+*.7z
+*.mp4
+*.avi
+*.mov
+*.mkv
+
+# Local data and outputs
+dataset/
+datasets/
+weights/
+outputs/
+implementation_outputs/
+report_single_figures/
+
+# Documents generated locally
+*.docx
+*.pdf
+*.hwp
