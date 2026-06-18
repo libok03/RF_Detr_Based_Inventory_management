@@ -1,0 +1,8 @@
+﻿번호,미삽입 항목,제외 또는 추후 삽입 이유
+1,per-image latency plot,"이미지별 outlier 확인용이며, 본문에는 평균 latency와 mAP-latency 그래프만 사용"
+2,per-image count error plot,"세부 실패 분석용이며, 본문에는 Count MAE 요약 그래프만 사용"
+3,per-class precision/recall/F1/IoU line plots,"세부 class 분석용이며, 본문에는 per-class F1 heatmap만 사용"
+4,mAP50 단독 그래프,모델 간 차이가 작아 본문에서는 mAP50-95 중심으로 제시
+5,F1 단독 bar chart,detection quality 그래프와 중복되어 제외
+6,detection radar chart,시각적으로 복잡하고 본문 핵심 주장과 중복되어 제외
+7,event-based camera fusion 실제 결과표,"동일 event_id, before/after, cam1~cam5 기준 fused count 산출 후 삽입"
