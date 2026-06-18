@@ -1,6 +1,6 @@
 # Implementation Pipeline
 
-This folder is for the actual unmanned-store implementation, separated from validation and report scripts.
+This folder is for the actual unmanned-store implementation, separated from the validation/report scripts.
 
 ## 1. Extract Frames
 
@@ -13,6 +13,23 @@ python implementation/frame_extract.py \
 ```
 
 `--stride 30` saves every 30th frame. Adjust it according to the video FPS and latency budget.
+
+## One-Command Full Pipeline
+
+Run frame extraction, detection/counting, camera fusion, and temporal filtering together:
+
+```bash
+python implementation/run_full_pipeline.py \
+  --source /path/to/videos_or_frames \
+  --model yolo11n \
+  --yolo-model weights/best.pt \
+  --yolo-conf 0.60 \
+  --device 0 \
+  --recursive \
+  --output-root implementation_outputs/full_pipeline
+```
+
+If `--source` contains mp4 files, frames are extracted first. If `--source` is already an image/frame directory, frame extraction is skipped automatically.
 
 ## 2. Run Detection, Count, and Camera Fusion
 
