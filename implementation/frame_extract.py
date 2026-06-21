@@ -22,13 +22,21 @@ def iter_videos(source: Path, recursive: bool):
             yield path
 
 
+def make_video_key(video_path: Path) -> str:
+    parent = video_path.parent.name
+    if parent.lower().startswith("cam"):
+        return f"{parent}_{video_path.stem}"
+    return video_path.stem
+
+
 def extract_video(video_path: Path, output_dir: Path, stride: int, resize_width: int = 0) -> int:
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
         logger.warning("Could not open video: %s", video_path)
         return 0
 
-    stem_dir = output_dir / video_path.stem
+    video_key = make_video_key(video_path)
+    stem_dir = output_dir / video_key
     stem_dir.mkdir(parents=True, exist_ok=True)
 
     frame_idx = 0
@@ -44,7 +52,7 @@ def extract_video(video_path: Path, output_dir: Path, stride: int, resize_width:
                 scale = resize_width / float(w)
                 frame = cv2.resize(frame, (resize_width, int(h * scale)), interpolation=cv2.INTER_AREA)
 
-            out_path = stem_dir / f"{video_path.stem}_frame_{frame_idx:06d}.jpg"
+            out_path = stem_dir / f"{video_key}_frame_{frame_idx:06d}.jpg"
             cv2.imwrite(str(out_path), frame)
             saved += 1
 
