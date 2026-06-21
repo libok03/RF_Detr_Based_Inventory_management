@@ -28,16 +28,21 @@ This repository intentionally contains only implementation code and lightweight 
 ```bash
 pip install -r requirements.txt
 python implementation/run_full_pipeline.py \
-  --source /path/to/videos_or_frames \
-  --model yolo11n \
-  --yolo-model weights/best.pt \
-  --yolo-conf 0.60 \
+  --source /path/to/4.TestVideo_Sample \
+  --model rf_detr_large_aug \
+  --rf-large-aug-model weights/rf-detr_large_aug.pt \
+  --rf-conf 0.45 \
+  --single-nms \
+  --nms-iou 0.55 \
   --device 0 \
   --recursive \
-  --output-root implementation_outputs/full_pipeline
+  --frame-stride 1 \
+  --output-root implementation_outputs/sample_allcams_rf_detr_large_aug_stride1_conf045
 ```
 
 If `--source` contains mp4 videos, frames are extracted first. If it points to already extracted images, frame extraction is skipped automatically.
+
+The current default settings in `run_full_pipeline.py` are RF-DETR Large Aug, `rf_conf=0.45`, `single_nms=True`, `nms_iou=0.55`, and `frame_stride=1`.
 
 ## Separate Steps
 
@@ -46,19 +51,21 @@ Run detection/counting only:
 ```bash
 python implementation/inventory_pipeline.py \
   --source /path/to/frames \
-  --model yolo11n \
-  --yolo-model weights/best.pt \
-  --yolo-conf 0.60 \
+  --model rf_detr_large_aug \
+  --rf-large-aug-model weights/rf-detr_large_aug.pt \
+  --rf-conf 0.45 \
+  --single-nms \
+  --nms-iou 0.55 \
   --device 0 \
   --recursive \
-  --output-dir implementation_outputs/yolo11n_inventory
+  --output-dir implementation_outputs/rf_detr_large_aug_inventory
 ```
 
 Apply temporal filtering after inference:
 
 ```bash
 python implementation/temporal_filter.py \
-  --input implementation_outputs/yolo11n_inventory/per_image_counts.csv \
+  --input implementation_outputs/rf_detr_large_aug_inventory/per_image_counts.csv \
   --window 8 \
   --min-appear 6
 ```
