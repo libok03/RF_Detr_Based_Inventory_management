@@ -30,16 +30,16 @@ def parse_args():
         description="Run frame extraction, detection/counting, camera fusion, and temporal filtering in one command."
     )
     parser.add_argument("--source", required=True, help="Video file/directory or already extracted frame directory")
-    parser.add_argument("--output-root", default="implementation_outputs/full_pipeline")
+    parser.add_argument("--output-root", default="implementation_outputs/sample_allcams_rf_detr_large_aug_stride1_conf045")
     parser.add_argument("--recursive", action="store_true")
 
     parser.add_argument("--skip-frame-extract", action="store_true")
-    parser.add_argument("--frame-stride", type=int, default=30)
+    parser.add_argument("--frame-stride", type=int, default=1)
     parser.add_argument("--resize-width", type=int, default=0)
 
     parser.add_argument(
         "--model",
-        default="yolo11n",
+        default="rf_detr_large_aug",
         choices=[
             "yolo11n",
             "rf_detr_small_aug",
@@ -55,10 +55,11 @@ def parse_args():
     parser.add_argument("--rf-large-model", default="weights/rf-detr_large.pth")
     parser.add_argument("--rf-large-aug-model", default="weights/rf-detr_large_aug.pt")
     parser.add_argument("--device", default=None)
-    parser.add_argument("--rf-conf", type=float, default=0.10)
+    parser.add_argument("--rf-conf", type=float, default=0.45)
     parser.add_argument("--yolo-conf", type=float, default=0.60)
     parser.add_argument("--nms-iou", type=float, default=0.55)
-    parser.add_argument("--single-nms", action="store_true")
+    parser.add_argument("--single-nms", action="store_true", default=True)
+    parser.add_argument("--no-single-nms", dest="single_nms", action="store_false")
     parser.add_argument("--soft-nms-min-score", type=float, default=0.001)
     parser.add_argument("--rf-weight", type=float, default=1.0)
     parser.add_argument("--yolo-weight", type=float, default=1.0)
