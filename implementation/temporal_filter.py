@@ -43,8 +43,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Apply temporal appearance filtering to per-frame class counts.")
     parser.add_argument("--input", required=True, help="per_image_counts.csv from inventory_pipeline.py")
     parser.add_argument("--output-dir", default=None)
-    parser.add_argument("--window", type=int, default=8)
-    parser.add_argument("--min-appear", type=int, default=6)
+    parser.add_argument("--window", type=int, default=5)
+    parser.add_argument("--min-appear", type=int, default=5)
     return parser.parse_args()
 
 
