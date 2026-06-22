@@ -34,6 +34,8 @@ python implementation/run_full_pipeline.py \
   --rf-conf 0.45 \
   --single-nms \
   --nms-iou 0.55 \
+  --duplicate-center-threshold 0.85 \
+  --duplicate-conf-ratio 0.65 \
   --device 0 \
   --recursive \
   --frame-stride 1 \
@@ -42,7 +44,7 @@ python implementation/run_full_pipeline.py \
 
 If `--source` contains mp4 videos, frames are extracted first. If it points to already extracted images, frame extraction is skipped automatically.
 
-The current default settings in `run_full_pipeline.py` are RF-DETR Large Aug, `rf_conf=0.45`, `single_nms=True`, `nms_iou=0.55`, and `frame_stride=1`.
+The current default settings in `run_full_pipeline.py` are RF-DETR Large Aug, `rf_conf=0.45`, `single_nms=True`, `nms_iou=0.55`, same-class duplicate suppression with `duplicate_center_threshold=0.85` and `duplicate_conf_ratio=0.65`, and `frame_stride=1`.
 
 ## Separate Steps
 
@@ -56,6 +58,8 @@ python implementation/inventory_pipeline.py \
   --rf-conf 0.45 \
   --single-nms \
   --nms-iou 0.55 \
+  --duplicate-center-threshold 0.85 \
+  --duplicate-conf-ratio 0.65 \
   --device 0 \
   --recursive \
   --output-dir implementation_outputs/rf_detr_large_aug_inventory
