@@ -97,8 +97,8 @@ For continuous frame sequences, apply temporal appearance filtering after infere
 ```bash
 python implementation/temporal_filter.py \
   --input implementation_outputs/yolo11n_inventory/per_image_counts.csv \
-  --window 8 \
-  --min-appear 6
+  --window 5 \
+  --min-appear 5
 ```
 
 Additional outputs:
@@ -113,7 +113,7 @@ Current RF-DETR default run:
 - RF-DETR Large Aug: `rf_conf=0.45`, `single_nms=True`, `nms_iou=0.55`.
 - Same-class duplicate suppression: `duplicate_center_threshold=0.85`, `duplicate_conf_ratio=0.65`.
 - Frame extraction: `frame_stride=1`.
-- Temporal filtering: `window=8`, `min_appear=6`.
+- Temporal filtering: `window=5`, `min_appear=5`.
 
 The same-class duplicate suppression removes a lower-confidence same-class box only when its center is very close to a higher-confidence box and its confidence is clearly lower. This is intended to reduce split detections of one product while avoiding removal of adjacent products with similar confidence.
 
