@@ -60,6 +60,8 @@ def parse_args():
     parser.add_argument("--nms-iou", type=float, default=0.55)
     parser.add_argument("--single-nms", action="store_true", default=True)
     parser.add_argument("--no-single-nms", dest="single_nms", action="store_false")
+    parser.add_argument("--duplicate-center-threshold", type=float, default=0.85)
+    parser.add_argument("--duplicate-conf-ratio", type=float, default=0.65)
     parser.add_argument("--soft-nms-min-score", type=float, default=0.001)
     parser.add_argument("--rf-weight", type=float, default=1.0)
     parser.add_argument("--yolo-weight", type=float, default=1.0)
@@ -132,6 +134,10 @@ def main():
         str(args.nms_iou),
         "--soft-nms-min-score",
         str(args.soft_nms_min_score),
+        "--duplicate-center-threshold",
+        str(args.duplicate_center_threshold),
+        "--duplicate-conf-ratio",
+        str(args.duplicate_conf_ratio),
         "--rf-weight",
         str(args.rf_weight),
         "--yolo-weight",
