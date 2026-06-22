@@ -2,7 +2,7 @@ import argparse
 import csv
 import re
 from pathlib import Path
-from typing import Dict, List
+from typing import List
 
 import pandas as pd
 
@@ -20,33 +20,23 @@ def smooth_group(group: pd.DataFrame, class_cols: List[str], window: int, min_ap
     out = group.copy()
     values = group[class_cols].astype(int)
 
-    for idx in range(len(group)):
-        start = max(0, idx - window + 1)
-        frame_window = values.iloc[start : idx + 1]
-        for col in class_cols:
-            appear = int((frame_window[col] > 0).sum())
-            out.loc[idx, col] = int(frame_window[col].max()) if appear >= min_appear else 0
+    appear = (values > 0).rolling(window=window, min_periods=1).sum()
+    window_max = values.rolling(window=window, min_periods=1).max()
+    out[class_cols] = window_max.where(appear >= min_appear, 0).astype(int)
 
     out["total_count"] = out[class_cols].astype(int).sum(axis=1)
     return out
 
 
 def fuse_camera_counts(df: pd.DataFrame, class_cols: List[str]) -> pd.DataFrame:
-    rows: List[Dict[str, object]] = []
-    for (event_id, model), group in df.groupby(["event_id", "model"], sort=True):
-        row: Dict[str, object] = {
-            "event_id": event_id,
-            "model": model,
-            "num_cameras": group["camera"].nunique(),
-        }
-        total = 0
-        for col in class_cols:
-            value = int(group[col].astype(int).max())
-            row[col] = value
-            total += value
-        row["fused_total_count"] = total
-        rows.append(row)
-    return pd.DataFrame(rows)
+    grouped = df.groupby(["event_id", "model"], sort=True)
+    fused = grouped[class_cols].max().astype(int).reset_index()
+    camera_counts = grouped["camera"].nunique().reset_index(name="num_cameras")
+    fused = fused.merge(camera_counts, on=["event_id", "model"], how="left")
+    ordered_cols = ["event_id", "model", "num_cameras", *class_cols]
+    fused = fused[ordered_cols]
+    fused["fused_total_count"] = fused[class_cols].sum(axis=1).astype(int)
+    return fused
 
 
 def parse_args() -> argparse.Namespace:
