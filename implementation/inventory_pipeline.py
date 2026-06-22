@@ -41,6 +41,7 @@ def nms_by_class(detections: Sequence[Detection], iou_threshold: float) -> List[
 def same_class_duplicate_suppression(
     detections: Sequence[Detection],
     center_threshold: float,
+    confidence_ratio_threshold: float,
 ) -> List[Detection]:
     if center_threshold <= 0:
         return list(detections)
@@ -68,7 +69,8 @@ def same_class_duplicate_suppression(
                 dy = det_cy - prev_cy
                 distance = (dx * dx + dy * dy) ** 0.5
                 scale = max(det_w, det_h, prev_w, prev_h)
-                if distance <= center_threshold * scale:
+                confidence_ratio = det.confidence / max(prev.confidence, 1e-9)
+                if distance <= center_threshold * scale and confidence_ratio < confidence_ratio_threshold:
                     duplicate = True
                     break
             if not duplicate:
@@ -148,7 +150,11 @@ class ModelRunner:
             if self.args.single_nms:
                 dets = nms_by_class(dets, self.args.nms_iou)
             if self.args.duplicate_center_threshold > 0:
-                dets = same_class_duplicate_suppression(dets, self.args.duplicate_center_threshold)
+                dets = same_class_duplicate_suppression(
+                    dets,
+                    self.args.duplicate_center_threshold,
+                    self.args.duplicate_conf_ratio,
+                )
             return dets
 
         rf_dets = self.rf.predict(image_path, self.args.rf_conf)
@@ -158,13 +164,25 @@ class ModelRunner:
 
         if self.model == "ensemble_wbf":
             dets = weighted_boxes_fusion(dets, self.args.nms_iou, weights)
-            return same_class_duplicate_suppression(dets, self.args.duplicate_center_threshold)
+            return same_class_duplicate_suppression(
+                dets,
+                self.args.duplicate_center_threshold,
+                self.args.duplicate_conf_ratio,
+            )
         if self.model == "ensemble_nms":
             dets = nms_by_class(dets, self.args.nms_iou)
-            return same_class_duplicate_suppression(dets, self.args.duplicate_center_threshold)
+            return same_class_duplicate_suppression(
+                dets,
+                self.args.duplicate_center_threshold,
+                self.args.duplicate_conf_ratio,
+            )
         if self.model == "ensemble_soft_nms":
             dets = soft_nms_by_class(dets, self.args.nms_iou, self.args.soft_nms_min_score)
-            return same_class_duplicate_suppression(dets, self.args.duplicate_center_threshold)
+            return same_class_duplicate_suppression(
+                dets,
+                self.args.duplicate_center_threshold,
+                self.args.duplicate_conf_ratio,
+            )
 
         raise ValueError(f"Unknown model: {self.model}")
 
@@ -339,7 +357,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--yolo-conf", type=float, default=0.60)
     parser.add_argument("--nms-iou", type=float, default=0.55)
     parser.add_argument("--single-nms", action="store_true", help="Apply class-wise NMS to single RF-DETR outputs")
-    parser.add_argument("--duplicate-center-threshold", type=float, default=0.0)
+    parser.add_argument("--duplicate-center-threshold", type=float, default=0.85)
+    parser.add_argument("--duplicate-conf-ratio", type=float, default=0.65)
     parser.add_argument("--soft-nms-min-score", type=float, default=0.001)
     parser.add_argument("--rf-weight", type=float, default=1.0)
     parser.add_argument("--yolo-weight", type=float, default=1.0)
