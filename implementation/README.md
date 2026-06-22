@@ -26,6 +26,8 @@ python implementation/run_full_pipeline.py \
   --rf-conf 0.45 \
   --single-nms \
   --nms-iou 0.55 \
+  --duplicate-center-threshold 0.85 \
+  --duplicate-conf-ratio 0.65 \
   --device 0 \
   --recursive \
   --frame-stride 1 \
@@ -59,6 +61,8 @@ python implementation/inventory_pipeline.py \
   --rf-conf 0.45 \
   --single-nms \
   --nms-iou 0.55 \
+  --duplicate-center-threshold 0.85 \
+  --duplicate-conf-ratio 0.65 \
   --recursive \
   --output-dir implementation_outputs/rf_detr_large_inventory
 ```
@@ -107,7 +111,10 @@ Additional outputs:
 Current RF-DETR default run:
 
 - RF-DETR Large Aug: `rf_conf=0.45`, `single_nms=True`, `nms_iou=0.55`.
+- Same-class duplicate suppression: `duplicate_center_threshold=0.85`, `duplicate_conf_ratio=0.65`.
 - Frame extraction: `frame_stride=1`.
 - Temporal filtering: `window=8`, `min_appear=6`.
+
+The same-class duplicate suppression removes a lower-confidence same-class box only when its center is very close to a higher-confidence box and its confidence is clearly lower. This is intended to reduce split detections of one product while avoiding removal of adjacent products with similar confidence.
 
 The current `inventory_pipeline.py` applies image-level count and camera max fusion. Temporal `window/min_appear` smoothing should be applied on top of frame-level outputs when continuous video sequences are used.
