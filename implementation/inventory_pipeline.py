@@ -38,6 +38,45 @@ def nms_by_class(detections: Sequence[Detection], iou_threshold: float) -> List[
     return sorted(kept, key=lambda det: (det.class_id, -det.confidence))
 
 
+def same_class_duplicate_suppression(
+    detections: Sequence[Detection],
+    center_threshold: float,
+) -> List[Detection]:
+    if center_threshold <= 0:
+        return list(detections)
+
+    kept: List[Detection] = []
+    for class_id in sorted({det.class_id for det in detections}):
+        candidates = sorted(
+            [det for det in detections if det.class_id == class_id],
+            key=lambda det: det.confidence,
+            reverse=True,
+        )
+        class_kept: List[Detection] = []
+        for det in candidates:
+            det_cx = (det.x1 + det.x2) * 0.5
+            det_cy = (det.y1 + det.y2) * 0.5
+            det_w = max(1.0, det.x2 - det.x1)
+            det_h = max(1.0, det.y2 - det.y1)
+            duplicate = False
+            for prev in class_kept:
+                prev_cx = (prev.x1 + prev.x2) * 0.5
+                prev_cy = (prev.y1 + prev.y2) * 0.5
+                prev_w = max(1.0, prev.x2 - prev.x1)
+                prev_h = max(1.0, prev.y2 - prev.y1)
+                dx = det_cx - prev_cx
+                dy = det_cy - prev_cy
+                distance = (dx * dx + dy * dy) ** 0.5
+                scale = max(det_w, det_h, prev_w, prev_h)
+                if distance <= center_threshold * scale:
+                    duplicate = True
+                    break
+            if not duplicate:
+                class_kept.append(det)
+        kept.extend(class_kept)
+    return sorted(kept, key=lambda det: (det.class_id, -det.confidence))
+
+
 def soft_nms_by_class(
     detections: Sequence[Detection],
     iou_threshold: float,
@@ -108,6 +147,8 @@ class ModelRunner:
             dets = self.rf.predict(image_path, self.args.rf_conf)
             if self.args.single_nms:
                 dets = nms_by_class(dets, self.args.nms_iou)
+            if self.args.duplicate_center_threshold > 0:
+                dets = same_class_duplicate_suppression(dets, self.args.duplicate_center_threshold)
             return dets
 
         rf_dets = self.rf.predict(image_path, self.args.rf_conf)
@@ -116,11 +157,14 @@ class ModelRunner:
         weights = {"rfdetr": self.args.rf_weight, "yolo": self.args.yolo_weight}
 
         if self.model == "ensemble_wbf":
-            return weighted_boxes_fusion(dets, self.args.nms_iou, weights)
+            dets = weighted_boxes_fusion(dets, self.args.nms_iou, weights)
+            return same_class_duplicate_suppression(dets, self.args.duplicate_center_threshold)
         if self.model == "ensemble_nms":
-            return nms_by_class(dets, self.args.nms_iou)
+            dets = nms_by_class(dets, self.args.nms_iou)
+            return same_class_duplicate_suppression(dets, self.args.duplicate_center_threshold)
         if self.model == "ensemble_soft_nms":
-            return soft_nms_by_class(dets, self.args.nms_iou, self.args.soft_nms_min_score)
+            dets = soft_nms_by_class(dets, self.args.nms_iou, self.args.soft_nms_min_score)
+            return same_class_duplicate_suppression(dets, self.args.duplicate_center_threshold)
 
         raise ValueError(f"Unknown model: {self.model}")
 
@@ -286,15 +330,16 @@ def parse_args() -> argparse.Namespace:
             "ensemble_soft_nms",
         ],
     )
-    parser.add_argument("--yolo-model", default=str(ROOT / "weights" / "best.pt"))
-    parser.add_argument("--rf-small-aug-model", default=str(ROOT / "weights" / "rf-detr_small_aug.pth"))
-    parser.add_argument("--rf-large-model", default=str(ROOT / "weights" / "rf-detr_large.pth"))
-    parser.add_argument("--rf-large-aug-model", default=str(ROOT / "weights" / "rf-detr_large_aug.pt"))
+    parser.add_argument("--yolo-model", default=str(ROOT / "server_eval_package" / "weights" / "best.pt"))
+    parser.add_argument("--rf-small-aug-model", default=str(ROOT / "server_eval_package" / "weights" / "rf-detr_small_aug.pth"))
+    parser.add_argument("--rf-large-model", default=str(ROOT / "server_eval_package" / "weights" / "rf-detr_large.pth"))
+    parser.add_argument("--rf-large-aug-model", default=str(ROOT / "server_eval_package" / "weights" / "rf-detr_large_aug.pt"))
     parser.add_argument("--device", default=None, help="YOLO device, e.g. 0 or cpu")
     parser.add_argument("--rf-conf", type=float, default=0.10)
     parser.add_argument("--yolo-conf", type=float, default=0.60)
     parser.add_argument("--nms-iou", type=float, default=0.55)
     parser.add_argument("--single-nms", action="store_true", help="Apply class-wise NMS to single RF-DETR outputs")
+    parser.add_argument("--duplicate-center-threshold", type=float, default=0.0)
     parser.add_argument("--soft-nms-min-score", type=float, default=0.001)
     parser.add_argument("--rf-weight", type=float, default=1.0)
     parser.add_argument("--yolo-weight", type=float, default=1.0)
