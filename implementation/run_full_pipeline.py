@@ -69,8 +69,8 @@ def parse_args():
     parser.add_argument("--max-images", type=int, default=0)
 
     parser.add_argument("--skip-temporal-filter", action="store_true")
-    parser.add_argument("--window", type=int, default=8)
-    parser.add_argument("--min-appear", type=int, default=6)
+    parser.add_argument("--window", type=int, default=5)
+    parser.add_argument("--min-appear", type=int, default=5)
     return parser.parse_args()
 
 
