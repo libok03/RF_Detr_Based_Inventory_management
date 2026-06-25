@@ -12,8 +12,10 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 ROOT = Path(__file__).resolve().parents[1]
 try:
     from detectors import Detection, RFDETRDetector, YOLODetector, iou, iter_images, weighted_boxes_fusion
+    from label_map import class_name
 except ImportError:
     from implementation.detectors import Detection, RFDETRDetector, YOLODetector, iou, iter_images, weighted_boxes_fusion
+    from implementation.label_map import class_name
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
@@ -218,6 +220,47 @@ def write_csv(path: Path, rows: List[Dict[str, object]], fieldnames: List[str]) 
         writer.writerows(rows)
 
 
+def write_long_count_csv(path: Path, rows: List[Dict[str, object]], num_classes: int) -> None:
+    long_rows = []
+    for row in rows:
+        for class_id in range(num_classes):
+            count = int(row.get(f"class_{class_id}", 0))
+            if count <= 0:
+                continue
+            long_rows.append(
+                {
+                    "event_id": row.get("event_id", ""),
+                    "image": row.get("image", ""),
+                    "camera": row.get("camera", ""),
+                    "model": row.get("model", ""),
+                    "class_id": class_id,
+                    "item_name": class_name(class_id),
+                    "count": count,
+                }
+            )
+    write_csv(path, long_rows, ["event_id", "image", "camera", "model", "class_id", "item_name", "count"])
+
+
+def write_long_fused_csv(path: Path, rows: List[Dict[str, object]], num_classes: int) -> None:
+    long_rows = []
+    for row in rows:
+        for class_id in range(num_classes):
+            count = int(row.get(f"class_{class_id}", 0))
+            if count <= 0:
+                continue
+            long_rows.append(
+                {
+                    "event_id": row.get("event_id", ""),
+                    "model": row.get("model", ""),
+                    "num_cameras": row.get("num_cameras", ""),
+                    "class_id": class_id,
+                    "item_name": class_name(class_id),
+                    "fused_count": count,
+                }
+            )
+    write_csv(path, long_rows, ["event_id", "model", "num_cameras", "class_id", "item_name", "fused_count"])
+
+
 def run(args: argparse.Namespace) -> None:
     source = Path(args.source)
     output_dir = Path(args.output_dir)
@@ -302,6 +345,8 @@ def run(args: argparse.Namespace) -> None:
         fused_rows,
         ["event_id", "model", "num_cameras", "fused_total_count"] + class_cols,
     )
+    write_long_count_csv(output_dir / "per_image_counts_long.csv", per_image_rows, args.num_classes)
+    write_long_fused_csv(output_dir / "camera_fused_counts_long.csv", fused_rows, args.num_classes)
 
     with (output_dir / "detections.json").open("w", encoding="utf-8") as f:
         json.dump(details, f, ensure_ascii=False, indent=2)

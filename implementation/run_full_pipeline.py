@@ -93,8 +93,14 @@ def parse_args():
     parser.add_argument("--recursive", action="store_true")
 
     parser.add_argument("--skip-frame-extract", action="store_true")
+    parser.add_argument(
+        "--direct-video-inference",
+        action="store_true",
+        help="Read videos directly and run RF-DETR batch inference across cameras without saving frames.",
+    )
     parser.add_argument("--frame-stride", type=int, default=1)
     parser.add_argument("--resize-width", type=int, default=0)
+    parser.add_argument("--max-frames", type=int, default=0)
 
     parser.add_argument(
         "--model",
@@ -156,11 +162,53 @@ def main():
     temporal_seconds = 0.0
     video_seconds = args.rtf_video_seconds
 
-    use_frame_extract = not args.skip_frame_extract and source_contains_videos(source, args.recursive)
-    if video_seconds <= 0 and source_contains_videos(source, args.recursive):
+    source_has_videos = source_contains_videos(source, args.recursive)
+    use_direct_video = args.direct_video_inference and source_has_videos
+    use_frame_extract = not use_direct_video and not args.skip_frame_extract and source_has_videos
+    if video_seconds <= 0 and source_has_videos:
         video_seconds = measure_video_seconds(source, args.recursive)
 
-    if use_frame_extract:
+    if use_direct_video:
+        if not args.model.startswith("rf_detr_"):
+            raise ValueError("--direct-video-inference currently supports RF-DETR single models only.")
+        detect_cmd = [
+            sys.executable,
+            str(repo_root / "implementation" / "video_inventory_pipeline.py"),
+            "--source",
+            str(source),
+            "--output-dir",
+            str(inventory_dir),
+            "--model",
+            args.model,
+            "--rf-small-aug-model",
+            args.rf_small_aug_model,
+            "--rf-large-model",
+            args.rf_large_model,
+            "--rf-large-aug-model",
+            args.rf_large_aug_model,
+            "--rf-conf",
+            str(args.rf_conf),
+            "--nms-iou",
+            str(args.nms_iou),
+            "--duplicate-center-threshold",
+            str(args.duplicate_center_threshold),
+            "--duplicate-conf-ratio",
+            str(args.duplicate_conf_ratio),
+            "--num-classes",
+            str(args.num_classes),
+            "--frame-stride",
+            str(args.frame_stride),
+            "--max-frames",
+            str(args.max_frames),
+        ]
+        if args.single_nms:
+            detect_cmd.append("--single-nms")
+        else:
+            detect_cmd.append("--no-single-nms")
+        if args.recursive:
+            detect_cmd.append("--recursive")
+        inference_seconds = run_command(detect_cmd)
+    elif use_frame_extract:
         frame_cmd = [
             sys.executable,
             str(repo_root / "implementation" / "frame_extract.py"),
@@ -178,56 +226,100 @@ def main():
         frame_seconds = run_command(frame_cmd)
         detect_source = frames_dir
         detect_recursive = True
+        detect_cmd = [
+            sys.executable,
+            str(repo_root / "implementation" / "inventory_pipeline.py"),
+            "--source",
+            str(detect_source),
+            "--output-dir",
+            str(inventory_dir),
+            "--model",
+            args.model,
+            "--yolo-model",
+            args.yolo_model,
+            "--rf-small-aug-model",
+            args.rf_small_aug_model,
+            "--rf-large-model",
+            args.rf_large_model,
+            "--rf-large-aug-model",
+            args.rf_large_aug_model,
+            "--rf-conf",
+            str(args.rf_conf),
+            "--yolo-conf",
+            str(args.yolo_conf),
+            "--nms-iou",
+            str(args.nms_iou),
+            "--soft-nms-min-score",
+            str(args.soft_nms_min_score),
+            "--duplicate-center-threshold",
+            str(args.duplicate_center_threshold),
+            "--duplicate-conf-ratio",
+            str(args.duplicate_conf_ratio),
+            "--rf-weight",
+            str(args.rf_weight),
+            "--yolo-weight",
+            str(args.yolo_weight),
+            "--num-classes",
+            str(args.num_classes),
+            "--max-images",
+            str(args.max_images),
+        ]
+        if args.device is not None:
+            detect_cmd.extend(["--device", args.device])
+        if args.single_nms:
+            detect_cmd.append("--single-nms")
+        if detect_recursive:
+            detect_cmd.append("--recursive")
+        inference_seconds = run_command(detect_cmd)
     else:
         logger.info("Skipping frame extraction; treating source as image/frame input.")
         detect_source = source
         detect_recursive = args.recursive
-
-    detect_cmd = [
-        sys.executable,
-        str(repo_root / "implementation" / "inventory_pipeline.py"),
-        "--source",
-        str(detect_source),
-        "--output-dir",
-        str(inventory_dir),
-        "--model",
-        args.model,
-        "--yolo-model",
-        args.yolo_model,
-        "--rf-small-aug-model",
-        args.rf_small_aug_model,
-        "--rf-large-model",
-        args.rf_large_model,
-        "--rf-large-aug-model",
-        args.rf_large_aug_model,
-        "--rf-conf",
-        str(args.rf_conf),
-        "--yolo-conf",
-        str(args.yolo_conf),
-        "--nms-iou",
-        str(args.nms_iou),
-        "--soft-nms-min-score",
-        str(args.soft_nms_min_score),
-        "--duplicate-center-threshold",
-        str(args.duplicate_center_threshold),
-        "--duplicate-conf-ratio",
-        str(args.duplicate_conf_ratio),
-        "--rf-weight",
-        str(args.rf_weight),
-        "--yolo-weight",
-        str(args.yolo_weight),
-        "--num-classes",
-        str(args.num_classes),
-        "--max-images",
-        str(args.max_images),
-    ]
-    if args.device is not None:
-        detect_cmd.extend(["--device", args.device])
-    if args.single_nms:
-        detect_cmd.append("--single-nms")
-    if detect_recursive:
-        detect_cmd.append("--recursive")
-    inference_seconds = run_command(detect_cmd)
+        detect_cmd = [
+            sys.executable,
+            str(repo_root / "implementation" / "inventory_pipeline.py"),
+            "--source",
+            str(detect_source),
+            "--output-dir",
+            str(inventory_dir),
+            "--model",
+            args.model,
+            "--yolo-model",
+            args.yolo_model,
+            "--rf-small-aug-model",
+            args.rf_small_aug_model,
+            "--rf-large-model",
+            args.rf_large_model,
+            "--rf-large-aug-model",
+            args.rf_large_aug_model,
+            "--rf-conf",
+            str(args.rf_conf),
+            "--yolo-conf",
+            str(args.yolo_conf),
+            "--nms-iou",
+            str(args.nms_iou),
+            "--soft-nms-min-score",
+            str(args.soft_nms_min_score),
+            "--duplicate-center-threshold",
+            str(args.duplicate_center_threshold),
+            "--duplicate-conf-ratio",
+            str(args.duplicate_conf_ratio),
+            "--rf-weight",
+            str(args.rf_weight),
+            "--yolo-weight",
+            str(args.yolo_weight),
+            "--num-classes",
+            str(args.num_classes),
+            "--max-images",
+            str(args.max_images),
+        ]
+        if args.device is not None:
+            detect_cmd.extend(["--device", args.device])
+        if args.single_nms:
+            detect_cmd.append("--single-nms")
+        if detect_recursive:
+            detect_cmd.append("--recursive")
+        inference_seconds = run_command(detect_cmd)
 
     if not args.skip_temporal_filter:
         temporal_cmd = [
@@ -254,6 +346,7 @@ def main():
         "window": args.window,
         "min_appear": args.min_appear,
         "frame_stride": args.frame_stride,
+        "direct_video_inference": args.direct_video_inference,
         "frame_extract_seconds": round(frame_seconds, 6),
         "inference_and_count_seconds": round(inference_seconds, 6),
         "temporal_filter_seconds": round(temporal_seconds, 6),

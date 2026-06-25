@@ -128,9 +128,10 @@ def weighted_boxes_fusion(
 
 
 class RFDETRDetector:
-    def __init__(self, model_path: str, variant: str = "large"):
+    def __init__(self, model_path: str, variant: str = "large", optimize_batch_size: Optional[int] = None):
         self.model_path = os.path.abspath(model_path)
         self.variant = variant
+        self.optimize_batch_size = optimize_batch_size
         self.model = self._load_model()
         self._optimize_for_inference()
 
@@ -140,6 +141,12 @@ class RFDETRDetector:
         optimize = getattr(self.model, "optimize_for_inference", None)
         if callable(optimize):
             logger.info("Optimizing RF-DETR model for inference")
+            if self.optimize_batch_size:
+                try:
+                    optimize(batch_size=self.optimize_batch_size)
+                    return
+                except TypeError:
+                    logger.debug("RF-DETR optimize_for_inference does not accept batch_size")
             optimize()
 
     def _load_model(self):
@@ -183,10 +190,10 @@ class RFDETRDetector:
         if image_bgr is None:
             return []
 
-        h, w = image_bgr.shape[:2]
         image_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-        pred = self.model.predict(image_rgb, threshold=conf)
+        return self.predict_rgb(image_rgb, conf)
 
+    def _prediction_to_detections(self, pred, image_w: int, image_h: int) -> List[Detection]:
         detections = []
         for box, score, class_id in zip(np.asarray(pred.xyxy), np.asarray(pred.confidence), np.asarray(pred.class_id)):
             detections.append(
@@ -197,12 +204,28 @@ class RFDETRDetector:
                     y1=float(box[1]),
                     x2=float(box[2]),
                     y2=float(box[3]),
-                    image_w=w,
-                    image_h=h,
+                    image_w=image_w,
+                    image_h=image_h,
                     source="rfdetr",
                 ).clipped()
             )
         return detections
+
+    def predict_rgb(self, image_rgb: np.ndarray, conf: float) -> List[Detection]:
+        h, w = image_rgb.shape[:2]
+        pred = self.model.predict(image_rgb, threshold=conf)
+        return self._prediction_to_detections(pred, w, h)
+
+    def predict_batch_rgb(self, images_rgb: Sequence[np.ndarray], conf: float) -> List[List[Detection]]:
+        if not images_rgb:
+            return []
+        preds = self.model.predict(list(images_rgb), threshold=conf)
+        if len(images_rgb) == 1 and not isinstance(preds, (list, tuple)):
+            preds = [preds]
+        return [
+            self._prediction_to_detections(pred, image.shape[1], image.shape[0])
+            for pred, image in zip(preds, images_rgb)
+        ]
 
 
 class YOLODetector:
