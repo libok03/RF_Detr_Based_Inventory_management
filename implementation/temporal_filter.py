@@ -1,6 +1,7 @@
 import argparse
 import csv
 import re
+import time
 from pathlib import Path
 from typing import List
 
@@ -50,6 +51,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    start = time.perf_counter()
     input_path = Path(args.input)
     output_dir = Path(args.output_dir) if args.output_dir else input_path.parent
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -70,6 +72,7 @@ def main() -> None:
 
     print(output_dir / "per_image_counts_temporal.csv")
     print(output_dir / "camera_fused_counts_temporal.csv")
+    print(f"temporal_filter_seconds={time.perf_counter() - start:.6f}")
 
 
 if __name__ == "__main__":
