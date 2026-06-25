@@ -131,6 +131,11 @@ def parse_args():
     parser.add_argument("--rf-weight", type=float, default=1.0)
     parser.add_argument("--yolo-weight", type=float, default=1.0)
     parser.add_argument("--num-classes", type=int, default=60)
+    parser.add_argument(
+        "--exclude-count-cameras",
+        default="",
+        help="Comma-separated cameras to exclude from fused count outputs, e.g. cam2.",
+    )
     parser.add_argument("--max-images", type=int, default=0)
 
     parser.add_argument("--skip-temporal-filter", action="store_true")
@@ -196,6 +201,8 @@ def main():
             str(args.duplicate_conf_ratio),
             "--num-classes",
             str(args.num_classes),
+            "--exclude-count-cameras",
+            args.exclude_count_cameras,
             "--frame-stride",
             str(args.frame_stride),
             "--max-frames",
@@ -261,6 +268,8 @@ def main():
             str(args.yolo_weight),
             "--num-classes",
             str(args.num_classes),
+            "--exclude-count-cameras",
+            args.exclude_count_cameras,
             "--max-images",
             str(args.max_images),
         ]
@@ -310,6 +319,8 @@ def main():
             str(args.yolo_weight),
             "--num-classes",
             str(args.num_classes),
+            "--exclude-count-cameras",
+            args.exclude_count_cameras,
             "--max-images",
             str(args.max_images),
         ]
@@ -331,6 +342,8 @@ def main():
             str(args.window),
             "--min-appear",
             str(args.min_appear),
+            "--exclude-count-cameras",
+            args.exclude_count_cameras,
         ]
         temporal_seconds = run_command(temporal_cmd)
 
@@ -347,6 +360,7 @@ def main():
         "min_appear": args.min_appear,
         "frame_stride": args.frame_stride,
         "direct_video_inference": args.direct_video_inference,
+        "exclude_count_cameras": args.exclude_count_cameras,
         "frame_extract_seconds": round(frame_seconds, 6),
         "inference_and_count_seconds": round(inference_seconds, 6),
         "temporal_filter_seconds": round(temporal_seconds, 6),

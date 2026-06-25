@@ -29,7 +29,14 @@ def smooth_group(group: pd.DataFrame, class_cols: List[str], window: int, min_ap
     return out
 
 
-def fuse_camera_counts(df: pd.DataFrame, class_cols: List[str]) -> pd.DataFrame:
+def parse_camera_exclusions(value: str) -> set:
+    return {part.strip().lower() for part in value.split(",") if part.strip()}
+
+
+def fuse_camera_counts(df: pd.DataFrame, class_cols: List[str], exclude_cameras: set = None) -> pd.DataFrame:
+    exclude_cameras = exclude_cameras or set()
+    if exclude_cameras:
+        df = df[~df["camera"].astype(str).str.lower().isin(exclude_cameras)].copy()
     grouped = df.groupby(["event_id", "model"], sort=True)
     fused = grouped[class_cols].max().astype(int).reset_index()
     camera_counts = grouped["camera"].nunique().reset_index(name="num_cameras")
@@ -46,6 +53,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--window", type=int, default=5)
     parser.add_argument("--min-appear", type=int, default=5)
+    parser.add_argument(
+        "--exclude-count-cameras",
+        default="",
+        help="Comma-separated cameras to exclude from camera-fused temporal counting, e.g. cam2.",
+    )
     return parser.parse_args()
 
 
@@ -65,7 +77,7 @@ def main() -> None:
     for _, group in df.groupby(["camera", "model"], sort=False):
         smoothed_parts.append(smooth_group(group, cols, args.window, args.min_appear))
     smoothed = pd.concat(smoothed_parts, ignore_index=True)
-    fused = fuse_camera_counts(smoothed, cols)
+    fused = fuse_camera_counts(smoothed, cols, parse_camera_exclusions(args.exclude_count_cameras))
 
     smoothed.to_csv(output_dir / "per_image_counts_temporal.csv", index=False, encoding="utf-8-sig")
     fused.to_csv(output_dir / "camera_fused_counts_temporal.csv", index=False, encoding="utf-8-sig", quoting=csv.QUOTE_MINIMAL)

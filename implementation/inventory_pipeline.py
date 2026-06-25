@@ -339,7 +339,11 @@ def run(args: argparse.Namespace) -> None:
         ["image", "event_id", "camera", "model", "class_id", "confidence", "x1", "y1", "x2", "y2", "source"],
     )
 
-    fused_rows = fuse_camera_counts(per_image_rows, args.num_classes)
+    fused_rows = fuse_camera_counts(
+        per_image_rows,
+        args.num_classes,
+        parse_camera_exclusions(args.exclude_count_cameras),
+    )
     write_csv(
         output_dir / "camera_fused_counts.csv",
         fused_rows,
@@ -354,7 +358,17 @@ def run(args: argparse.Namespace) -> None:
     logger.info("Saved implementation outputs to %s", output_dir.resolve())
 
 
-def fuse_camera_counts(rows: List[Dict[str, object]], num_classes: int) -> List[Dict[str, object]]:
+def parse_camera_exclusions(value: str) -> set:
+    return {part.strip().lower() for part in value.split(",") if part.strip()}
+
+
+def fuse_camera_counts(
+    rows: List[Dict[str, object]],
+    num_classes: int,
+    exclude_cameras: set = None,
+) -> List[Dict[str, object]]:
+    exclude_cameras = exclude_cameras or set()
+    rows = [row for row in rows if str(row.get("camera", "")).lower() not in exclude_cameras]
     grouped: Dict[Tuple[str, str], List[Dict[str, object]]] = {}
     for row in rows:
         grouped.setdefault((str(row["event_id"]), str(row["model"])), []).append(row)
@@ -408,6 +422,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rf-weight", type=float, default=1.0)
     parser.add_argument("--yolo-weight", type=float, default=1.0)
     parser.add_argument("--num-classes", type=int, default=DEFAULT_CLASSES)
+    parser.add_argument(
+        "--exclude-count-cameras",
+        default="",
+        help="Comma-separated cameras to exclude from camera-fused counting, e.g. cam2.",
+    )
     parser.add_argument("--recursive", action="store_true")
     parser.add_argument("--max-images", type=int, default=0)
     return parser.parse_args()

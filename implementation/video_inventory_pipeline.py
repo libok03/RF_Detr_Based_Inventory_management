@@ -17,6 +17,7 @@ try:
         count_classes,
         fuse_camera_counts,
         nms_by_class,
+        parse_camera_exclusions,
         same_class_duplicate_suppression,
         write_csv,
         write_long_count_csv,
@@ -28,6 +29,7 @@ except ImportError:
         count_classes,
         fuse_camera_counts,
         nms_by_class,
+        parse_camera_exclusions,
         same_class_duplicate_suppression,
         write_csv,
         write_long_count_csv,
@@ -246,7 +248,11 @@ def run(args: argparse.Namespace) -> None:
         detection_rows,
         ["image", "event_id", "camera", "model", "class_id", "confidence", "x1", "y1", "x2", "y2", "source"],
     )
-    fused_rows = fuse_camera_counts(per_image_rows, args.num_classes)
+    fused_rows = fuse_camera_counts(
+        per_image_rows,
+        args.num_classes,
+        parse_camera_exclusions(args.exclude_count_cameras),
+    )
     write_csv(
         output_dir / "camera_fused_counts.csv",
         fused_rows,
@@ -275,6 +281,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--duplicate-center-threshold", type=float, default=0.85)
     parser.add_argument("--duplicate-conf-ratio", type=float, default=0.70)
     parser.add_argument("--num-classes", type=int, default=60)
+    parser.add_argument(
+        "--exclude-count-cameras",
+        default="",
+        help="Comma-separated cameras to exclude from camera-fused counting, e.g. cam2.",
+    )
     parser.add_argument("--frame-stride", type=int, default=3)
     parser.add_argument("--max-frames", type=int, default=0)
     return parser.parse_args()
