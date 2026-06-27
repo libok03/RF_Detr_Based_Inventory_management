@@ -81,6 +81,44 @@ def same_class_duplicate_suppression(
     return sorted(kept, key=lambda det: (det.class_id, -det.confidence))
 
 
+def containment_duplicate_suppression(
+    detections: Sequence[Detection],
+    containment_threshold: float,
+    confidence_ratio_threshold: float,
+) -> List[Detection]:
+    if containment_threshold <= 0:
+        return list(detections)
+
+    kept: List[Detection] = []
+    for class_id in sorted({det.class_id for det in detections}):
+        candidates = sorted(
+            [det for det in detections if det.class_id == class_id],
+            key=lambda det: det.confidence,
+            reverse=True,
+        )
+        class_kept: List[Detection] = []
+        for det in candidates:
+            det_area = max(0.0, det.x2 - det.x1) * max(0.0, det.y2 - det.y1)
+            duplicate = False
+            for prev in class_kept:
+                prev_area = max(0.0, prev.x2 - prev.x1) * max(0.0, prev.y2 - prev.y1)
+                small_area = max(min(det_area, prev_area), 1e-9)
+                inter_x1 = max(det.x1, prev.x1)
+                inter_y1 = max(det.y1, prev.y1)
+                inter_x2 = min(det.x2, prev.x2)
+                inter_y2 = min(det.y2, prev.y2)
+                inter_area = max(0.0, inter_x2 - inter_x1) * max(0.0, inter_y2 - inter_y1)
+                containment = inter_area / small_area
+                confidence_ratio = det.confidence / max(prev.confidence, 1e-9)
+                if containment >= containment_threshold and confidence_ratio < confidence_ratio_threshold:
+                    duplicate = True
+                    break
+            if not duplicate:
+                class_kept.append(det)
+        kept.extend(class_kept)
+    return sorted(kept, key=lambda det: (det.class_id, -det.confidence))
+
+
 def soft_nms_by_class(
     detections: Sequence[Detection],
     iou_threshold: float,
@@ -156,6 +194,12 @@ class ModelRunner:
                     dets,
                     self.args.duplicate_center_threshold,
                     self.args.duplicate_conf_ratio,
+                )
+            if self.args.containment_threshold > 0:
+                dets = containment_duplicate_suppression(
+                    dets,
+                    self.args.containment_threshold,
+                    self.args.containment_conf_ratio,
                 )
             return dets
 
@@ -418,6 +462,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--single-nms", action="store_true", help="Apply class-wise NMS to single RF-DETR outputs")
     parser.add_argument("--duplicate-center-threshold", type=float, default=0.85)
     parser.add_argument("--duplicate-conf-ratio", type=float, default=0.65)
+    parser.add_argument("--containment-threshold", type=float, default=0.0)
+    parser.add_argument("--containment-conf-ratio", type=float, default=0.95)
     parser.add_argument("--soft-nms-min-score", type=float, default=0.001)
     parser.add_argument("--rf-weight", type=float, default=1.0)
     parser.add_argument("--yolo-weight", type=float, default=1.0)

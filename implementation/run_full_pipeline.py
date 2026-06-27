@@ -127,6 +127,8 @@ def parse_args():
     parser.add_argument("--no-single-nms", dest="single_nms", action="store_false")
     parser.add_argument("--duplicate-center-threshold", type=float, default=0.85)
     parser.add_argument("--duplicate-conf-ratio", type=float, default=0.65)
+    parser.add_argument("--containment-threshold", type=float, default=0.0)
+    parser.add_argument("--containment-conf-ratio", type=float, default=0.95)
     parser.add_argument("--soft-nms-min-score", type=float, default=0.001)
     parser.add_argument("--rf-weight", type=float, default=1.0)
     parser.add_argument("--yolo-weight", type=float, default=1.0)
@@ -199,6 +201,10 @@ def main():
             str(args.duplicate_center_threshold),
             "--duplicate-conf-ratio",
             str(args.duplicate_conf_ratio),
+            "--containment-threshold",
+            str(args.containment_threshold),
+            "--containment-conf-ratio",
+            str(args.containment_conf_ratio),
             "--num-classes",
             str(args.num_classes),
             "--exclude-count-cameras",
@@ -262,6 +268,10 @@ def main():
             str(args.duplicate_center_threshold),
             "--duplicate-conf-ratio",
             str(args.duplicate_conf_ratio),
+            "--containment-threshold",
+            str(args.containment_threshold),
+            "--containment-conf-ratio",
+            str(args.containment_conf_ratio),
             "--rf-weight",
             str(args.rf_weight),
             "--yolo-weight",
@@ -313,6 +323,10 @@ def main():
             str(args.duplicate_center_threshold),
             "--duplicate-conf-ratio",
             str(args.duplicate_conf_ratio),
+            "--containment-threshold",
+            str(args.containment_threshold),
+            "--containment-conf-ratio",
+            str(args.containment_conf_ratio),
             "--rf-weight",
             str(args.rf_weight),
             "--yolo-weight",
@@ -356,6 +370,8 @@ def main():
         "nms_iou": args.nms_iou,
         "duplicate_center_threshold": args.duplicate_center_threshold,
         "duplicate_conf_ratio": args.duplicate_conf_ratio,
+        "containment_threshold": args.containment_threshold,
+        "containment_conf_ratio": args.containment_conf_ratio,
         "window": args.window,
         "min_appear": args.min_appear,
         "frame_stride": args.frame_stride,

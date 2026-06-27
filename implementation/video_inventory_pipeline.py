@@ -15,6 +15,7 @@ try:
     from detectors import Detection, RFDETRDetector
     from inventory_pipeline import (
         count_classes,
+        containment_duplicate_suppression,
         fuse_camera_counts,
         nms_by_class,
         parse_camera_exclusions,
@@ -27,6 +28,7 @@ except ImportError:
     from implementation.detectors import Detection, RFDETRDetector
     from implementation.inventory_pipeline import (
         count_classes,
+        containment_duplicate_suppression,
         fuse_camera_counts,
         nms_by_class,
         parse_camera_exclusions,
@@ -85,6 +87,12 @@ def postprocess_rf(detections: Sequence[Detection], args: argparse.Namespace) ->
             dets,
             args.duplicate_center_threshold,
             args.duplicate_conf_ratio,
+        )
+    if args.containment_threshold > 0:
+        dets = containment_duplicate_suppression(
+            dets,
+            args.containment_threshold,
+            args.containment_conf_ratio,
         )
     return dets
 
@@ -280,6 +288,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--no-single-nms", dest="single_nms", action="store_false")
     parser.add_argument("--duplicate-center-threshold", type=float, default=0.85)
     parser.add_argument("--duplicate-conf-ratio", type=float, default=0.70)
+    parser.add_argument("--containment-threshold", type=float, default=0.0)
+    parser.add_argument("--containment-conf-ratio", type=float, default=0.95)
     parser.add_argument("--num-classes", type=int, default=60)
     parser.add_argument(
         "--exclude-count-cameras",
