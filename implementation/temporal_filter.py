@@ -21,9 +21,12 @@ def smooth_group(group: pd.DataFrame, class_cols: List[str], window: int, min_ap
     out = group.copy()
     values = group[class_cols].astype(int)
 
-    appear = (values > 0).rolling(window=window, min_periods=1).sum()
-    window_max = values.rolling(window=window, min_periods=1).max()
-    out[class_cols] = window_max.where(appear >= min_appear, 0).astype(int)
+    smoothed = pd.DataFrame(0, index=values.index, columns=class_cols)
+    max_count = int(values.max().max()) if not values.empty else 0
+    for level in range(1, max_count + 1):
+        sustained = (values >= level).rolling(window=window, min_periods=1).sum() >= min_appear
+        smoothed = smoothed.where(~sustained, level)
+    out[class_cols] = smoothed.astype(int)
 
     out["total_count"] = out[class_cols].astype(int).sum(axis=1)
     return out
