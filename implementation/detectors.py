@@ -1,6 +1,7 @@
 import logging
 import os
 import warnings
+from contextlib import contextmanager, redirect_stderr
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
@@ -17,6 +18,12 @@ warnings.filterwarnings("ignore", message=r".*A new version of Albumentations is
 warnings.filterwarnings("ignore", message=r".*Converting a tensor to a Python boolean might cause the trace to be incorrect.*")
 warnings.filterwarnings("ignore", message=r".*`loss_type=None` was set in the config.*")
 warnings.filterwarnings("ignore", message=r".*`use_return_dict` is deprecated.*")
+try:
+    from torch.jit import TracerWarning
+
+    warnings.filterwarnings("ignore", category=TracerWarning)
+except Exception:
+    pass
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -25,6 +32,15 @@ logging.getLogger("transformers").setLevel(logging.ERROR)
 logging.getLogger("albumentations").setLevel(logging.ERROR)
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
+
+
+@contextmanager
+def quiet_stderr(enabled: bool = True):
+    if not enabled:
+        yield
+        return
+    with open(os.devnull, "w", encoding="utf-8") as devnull, redirect_stderr(devnull):
+        yield
 
 
 @dataclass
@@ -161,13 +177,16 @@ class RFDETRDetector:
         optimize = getattr(self.model, "optimize_for_inference", None)
         if callable(optimize):
             logger.debug("Optimizing RF-DETR model for inference")
-            if self.optimize_batch_size:
-                try:
-                    optimize(batch_size=self.optimize_batch_size)
-                    return
-                except TypeError:
-                    logger.debug("RF-DETR optimize_for_inference does not accept batch_size")
-            optimize()
+            quiet_optimize = os.environ.get("RFDETR_QUIET_OPTIMIZE", "1").lower() not in {"0", "false"}
+            with warnings.catch_warnings(), quiet_stderr(quiet_optimize):
+                warnings.simplefilter("ignore")
+                if self.optimize_batch_size:
+                    try:
+                        optimize(batch_size=self.optimize_batch_size)
+                        return
+                    except TypeError:
+                        logger.debug("RF-DETR optimize_for_inference does not accept batch_size")
+                optimize()
 
     def _load_model(self):
         logger.debug("Loading RF-DETR model: %s", self.model_path)
