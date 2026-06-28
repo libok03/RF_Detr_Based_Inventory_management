@@ -1,8 +1,22 @@
 import argparse
 import json
+import os
 import sys
+import warnings
 from pathlib import Path
 from typing import Dict, List, Tuple
+
+os.environ.setdefault("NO_ALBUMENTATIONS_UPDATE", "1")
+os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
+warnings.filterwarnings("ignore", message=r".*Pandas requires version.*bottleneck.*", category=UserWarning)
+warnings.filterwarnings("ignore", message=r".*A new version of Albumentations is available.*")
+warnings.filterwarnings("ignore", category=FutureWarning)
+try:
+    from torch.jit import TracerWarning
+
+    warnings.filterwarnings("ignore", category=TracerWarning)
+except Exception:
+    pass
 
 import cv2
 import numpy as np
@@ -59,17 +73,21 @@ def load_gt(label_path: Path, w: int, h: int) -> List[Tuple[int, float, float, f
 
 
 def match_counts(pred_rows: List[dict], gt_rows: List[Tuple[int, float, float, float, float]], num_classes: int, iou_thr: float) -> Dict[int, dict]:
-    by_class = {
-        cls: {
-            "pred": [p for p in pred_rows if p["class_id"] == cls],
-            "gt": [g for g in gt_rows if g[0] == cls],
-        }
-        for cls in range(num_classes)
-    }
+    pred_by_class = {cls: [] for cls in range(num_classes)}
+    gt_by_class = {cls: [] for cls in range(num_classes)}
+    for pred in pred_rows:
+        cls = int(pred["class_id"])
+        if 0 <= cls < num_classes:
+            pred_by_class[cls].append(pred)
+    for gt in gt_rows:
+        cls = int(gt[0])
+        if 0 <= cls < num_classes:
+            gt_by_class[cls].append(gt)
+
     stats = {}
-    for cls, data in by_class.items():
-        preds = data["pred"]
-        gts = data["gt"]
+    for cls in range(num_classes):
+        preds = pred_by_class[cls]
+        gts = gt_by_class[cls]
         candidates = []
         for pi, p in enumerate(preds):
             for gi, g in enumerate(gts):
@@ -146,20 +164,33 @@ def collect_detections(args) -> Tuple[pd.DataFrame, pd.DataFrame]:
 
 def build_threshold_table(det_df: pd.DataFrame, gt_df: pd.DataFrame, thresholds: List[float], args) -> pd.DataFrame:
     images = sorted(set(gt_df["image"].tolist()) | set(det_df["image"].tolist()))
+    gt_by_image = {
+        image: [
+            (int(r.class_id), float(r.x1), float(r.y1), float(r.x2), float(r.y2))
+            for r in group.itertuples(index=False)
+        ]
+        for image, group in gt_df.groupby("image", sort=False)
+    }
+    max_price = max(class_price(c) for c in range(args.num_classes))
     rows = []
     for threshold in thresholds:
         det_t = det_df[det_df["confidence"] >= threshold].copy()
+        det_by_image = {
+            image: group.to_dict("records")
+            for image, group in det_t.groupby("image", sort=False)
+        }
         totals = {cls: {"tp": 0, "fp": 0, "fn": 0, "gt": 0, "pred": 0} for cls in range(args.num_classes)}
         for image in images:
-            pred_rows = det_t[det_t["image"] == image].to_dict("records")
-            gt_rows = [
-                (int(r.class_id), float(r.x1), float(r.y1), float(r.x2), float(r.y2))
-                for r in gt_df[gt_df["image"] == image].itertuples(index=False)
-            ]
+            pred_rows = det_by_image.get(image, [])
+            gt_rows = gt_by_image.get(image, [])
             stats = match_counts(pred_rows, gt_rows, args.num_classes, args.iou_match)
             for cls, s in stats.items():
                 for key in totals[cls]:
                     totals[cls][key] += s[key]
+        det_class_stats = det_t.groupby("class_id").agg(
+            confidence=("confidence", "mean"),
+            area_norm=("area_norm", "mean"),
+        )
         for cls, s in totals.items():
             tp, fp, fn = s["tp"], s["fp"], s["fn"]
             precision = tp / (tp + fp + 1e-9)
@@ -168,9 +199,14 @@ def build_threshold_table(det_df: pd.DataFrame, gt_df: pd.DataFrame, thresholds:
             over = fp / (s["gt"] + 1e-9)
             under = fn / (s["gt"] + 1e-9)
             price = class_price(cls)
-            price_weight = price / max(class_price(c) for c in range(args.num_classes))
+            price_weight = price / max_price
             score = f1 - args.fp_penalty * price_weight * over - args.fn_penalty * price_weight * under
-            cls_dets = det_t[det_t["class_id"] == cls]
+            if cls in det_class_stats.index:
+                mean_conf = float(det_class_stats.loc[cls, "confidence"])
+                mean_area = float(det_class_stats.loc[cls, "area_norm"])
+            else:
+                mean_conf = 0.0
+                mean_area = 0.0
             rows.append(
                 {
                     "class_id": cls,
@@ -187,8 +223,8 @@ def build_threshold_table(det_df: pd.DataFrame, gt_df: pd.DataFrame, thresholds:
                     "f1": f1,
                     "over_rate": over,
                     "under_rate": under,
-                    "mean_conf_kept": float(cls_dets["confidence"].mean()) if not cls_dets.empty else 0.0,
-                    "mean_area_kept": float(cls_dets["area_norm"].mean()) if not cls_dets.empty else 0.0,
+                    "mean_conf_kept": mean_conf,
+                    "mean_area_kept": mean_area,
                     "score": score,
                 }
             )
