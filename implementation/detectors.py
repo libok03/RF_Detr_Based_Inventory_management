@@ -1,5 +1,6 @@
 import logging
 import os
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
@@ -8,8 +9,20 @@ import cv2
 import numpy as np
 
 
+os.environ.setdefault("NO_ALBUMENTATIONS_UPDATE", "1")
+os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
+
+warnings.filterwarnings("ignore", category=FutureWarning, module=r"deprecate\..*")
+warnings.filterwarnings("ignore", message=r".*A new version of Albumentations is available.*")
+warnings.filterwarnings("ignore", message=r".*Converting a tensor to a Python boolean might cause the trace to be incorrect.*")
+warnings.filterwarnings("ignore", message=r".*`loss_type=None` was set in the config.*")
+warnings.filterwarnings("ignore", message=r".*`use_return_dict` is deprecated.*")
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+logging.getLogger("rf-detr").setLevel(logging.ERROR)
+logging.getLogger("transformers").setLevel(logging.ERROR)
+logging.getLogger("albumentations").setLevel(logging.ERROR)
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
@@ -128,10 +141,17 @@ def weighted_boxes_fusion(
 
 
 class RFDETRDetector:
-    def __init__(self, model_path: str, variant: str = "large", optimize_batch_size: Optional[int] = None):
+    def __init__(
+        self,
+        model_path: str,
+        variant: str = "large",
+        optimize_batch_size: Optional[int] = None,
+        num_classes: int = 60,
+    ):
         self.model_path = os.path.abspath(model_path)
         self.variant = variant
         self.optimize_batch_size = optimize_batch_size
+        self.num_classes = num_classes
         self.model = self._load_model()
         self._optimize_for_inference()
 
@@ -155,7 +175,10 @@ class RFDETRDetector:
             from rfdetr import RFDETR
 
             if hasattr(RFDETR, "from_checkpoint"):
-                return RFDETR.from_checkpoint(self.model_path)
+                try:
+                    return RFDETR.from_checkpoint(self.model_path, num_classes=self.num_classes)
+                except TypeError:
+                    return RFDETR.from_checkpoint(self.model_path)
         except Exception as exc:
             logger.debug("RFDETR.from_checkpoint failed: %s", exc)
 
@@ -173,9 +196,12 @@ class RFDETRDetector:
 
             cls = getattr(rfdetr, class_name)
             try:
-                return cls(pretrain_weights=self.model_path)
+                return cls(pretrain_weights=self.model_path, num_classes=self.num_classes)
             except TypeError:
-                model = cls()
+                try:
+                    model = cls(num_classes=self.num_classes)
+                except TypeError:
+                    model = cls()
                 if hasattr(model, "load"):
                     model.load(self.model_path)
                     return model
