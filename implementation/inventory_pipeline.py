@@ -11,9 +11,11 @@ from typing import Dict, Iterable, List, Sequence, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 try:
+    from class_thresholds import apply_class_thresholds, load_class_thresholds, threshold_floor
     from detectors import Detection, RFDETRDetector, YOLODetector, iou, iter_images, weighted_boxes_fusion
     from label_map import class_name
 except ImportError:
+    from implementation.class_thresholds import apply_class_thresholds, load_class_thresholds, threshold_floor
     from implementation.detectors import Detection, RFDETRDetector, YOLODetector, iou, iter_images, weighted_boxes_fusion
     from implementation.label_map import class_name
 
@@ -159,6 +161,8 @@ class ModelRunner:
 
         self.yolo = None
         self.rf = None
+        self.class_thresholds = load_class_thresholds(args.class_thresholds)
+        self.rf_predict_conf = threshold_floor(args.rf_conf, self.class_thresholds)
 
         if self.model in {"yolo11n", "ensemble_wbf", "ensemble_nms", "ensemble_soft_nms"}:
             self.yolo = YOLODetector(args.yolo_model, device=args.device)
@@ -186,7 +190,8 @@ class ModelRunner:
             return self.yolo.predict(image_path, self.args.yolo_conf)
 
         if self.model.startswith("rf_detr_"):
-            dets = self.rf.predict(image_path, self.args.rf_conf)
+            dets = self.rf.predict(image_path, self.rf_predict_conf)
+            dets = apply_class_thresholds(dets, self.class_thresholds, self.args.rf_conf)
             if self.args.single_nms:
                 dets = nms_by_class(dets, self.args.nms_iou)
             if self.args.duplicate_center_threshold > 0:
@@ -203,7 +208,8 @@ class ModelRunner:
                 )
             return dets
 
-        rf_dets = self.rf.predict(image_path, self.args.rf_conf)
+        rf_dets = self.rf.predict(image_path, self.rf_predict_conf)
+        rf_dets = apply_class_thresholds(rf_dets, self.class_thresholds, self.args.rf_conf)
         yolo_dets = self.yolo.predict(image_path, self.args.yolo_conf)
         dets = rf_dets + yolo_dets
         weights = {"rfdetr": self.args.rf_weight, "yolo": self.args.yolo_weight}
@@ -457,6 +463,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rf-large-aug-model", default=str(ROOT / "server_eval_package" / "weights" / "rf-detr_large_aug.pt"))
     parser.add_argument("--device", default=None, help="YOLO device, e.g. 0 or cpu")
     parser.add_argument("--rf-conf", type=float, default=0.10)
+    parser.add_argument("--class-thresholds", default="", help="JSON file containing per-class RF-DETR confidence thresholds.")
     parser.add_argument("--yolo-conf", type=float, default=0.60)
     parser.add_argument("--nms-iou", type=float, default=0.55)
     parser.add_argument("--single-nms", action="store_true", help="Apply class-wise NMS to single RF-DETR outputs")

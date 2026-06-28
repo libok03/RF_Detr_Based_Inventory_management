@@ -12,6 +12,7 @@ import cv2
 
 ROOT = Path(__file__).resolve().parents[1]
 try:
+    from class_thresholds import apply_class_thresholds, load_class_thresholds, threshold_floor
     from detectors import Detection, RFDETRDetector
     from inventory_pipeline import (
         count_classes,
@@ -25,6 +26,7 @@ try:
         write_long_fused_csv,
     )
 except ImportError:
+    from implementation.class_thresholds import apply_class_thresholds, load_class_thresholds, threshold_floor
     from implementation.detectors import Detection, RFDETRDetector
     from implementation.inventory_pipeline import (
         count_classes,
@@ -79,7 +81,7 @@ def group_videos(source: Path, recursive: bool) -> Dict[str, List[Tuple[str, Pat
 
 
 def postprocess_rf(detections: Sequence[Detection], args: argparse.Namespace) -> List[Detection]:
-    dets = list(detections)
+    dets = apply_class_thresholds(detections, args.loaded_class_thresholds, args.rf_conf)
     if args.single_nms:
         dets = nms_by_class(dets, args.nms_iou)
     if args.duplicate_center_threshold > 0:
@@ -172,6 +174,8 @@ def run(args: argparse.Namespace) -> None:
     }[args.model]
     max_batch = max(len(items) for items in groups.values())
     detector = RFDETRDetector(model_path, variant=variant, optimize_batch_size=max_batch)
+    args.loaded_class_thresholds = load_class_thresholds(args.class_thresholds)
+    predict_conf = threshold_floor(args.rf_conf, args.loaded_class_thresholds)
 
     per_image_rows: List[Dict[str, object]] = []
     detection_rows: List[Dict[str, object]] = []
@@ -211,7 +215,7 @@ def run(args: argparse.Namespace) -> None:
                     continue
 
                 start = time.perf_counter()
-                batch_dets = detector.predict_batch_rgb(frames_rgb, args.rf_conf)
+                batch_dets = detector.predict_batch_rgb(frames_rgb, predict_conf)
                 batch_latency_ms = (time.perf_counter() - start) * 1000.0
                 per_image_latency_ms = batch_latency_ms / max(len(batch_dets), 1)
                 event_id = f"{event}_frame_{frame_idx:06d}"
@@ -283,6 +287,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rf-large-model", default=str(ROOT / "server_eval_package" / "weights" / "rf-detr_large.pth"))
     parser.add_argument("--rf-large-aug-model", default=str(ROOT / "server_eval_package" / "weights" / "rf-detr_large_aug.pt"))
     parser.add_argument("--rf-conf", type=float, default=0.60)
+    parser.add_argument("--class-thresholds", default="", help="JSON file containing per-class RF-DETR confidence thresholds.")
     parser.add_argument("--nms-iou", type=float, default=0.40)
     parser.add_argument("--single-nms", action="store_true", default=True)
     parser.add_argument("--no-single-nms", dest="single_nms", action="store_false")

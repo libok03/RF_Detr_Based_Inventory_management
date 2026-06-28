@@ -121,6 +121,7 @@ def parse_args():
     parser.add_argument("--rf-large-aug-model", default="weights/rf-detr_large_aug.pt")
     parser.add_argument("--device", default=None)
     parser.add_argument("--rf-conf", type=float, default=0.45)
+    parser.add_argument("--class-thresholds", default="", help="JSON file containing per-class RF-DETR confidence thresholds.")
     parser.add_argument("--yolo-conf", type=float, default=0.60)
     parser.add_argument("--nms-iou", type=float, default=0.55)
     parser.add_argument("--single-nms", action="store_true", default=True)
@@ -195,6 +196,8 @@ def main():
             args.rf_large_aug_model,
             "--rf-conf",
             str(args.rf_conf),
+            "--class-thresholds",
+            args.class_thresholds,
             "--nms-iou",
             str(args.nms_iou),
             "--duplicate-center-threshold",
@@ -258,6 +261,8 @@ def main():
             args.rf_large_aug_model,
             "--rf-conf",
             str(args.rf_conf),
+            "--class-thresholds",
+            args.class_thresholds,
             "--yolo-conf",
             str(args.yolo_conf),
             "--nms-iou",
@@ -313,6 +318,8 @@ def main():
             args.rf_large_aug_model,
             "--rf-conf",
             str(args.rf_conf),
+            "--class-thresholds",
+            args.class_thresholds,
             "--yolo-conf",
             str(args.yolo_conf),
             "--nms-iou",
@@ -367,6 +374,7 @@ def main():
         "output_root": str(output_root),
         "model": args.model,
         "rf_conf": args.rf_conf,
+        "class_thresholds": args.class_thresholds,
         "nms_iou": args.nms_iou,
         "duplicate_center_threshold": args.duplicate_center_threshold,
         "duplicate_conf_ratio": args.duplicate_conf_ratio,
