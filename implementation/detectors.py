@@ -160,7 +160,7 @@ class RFDETRDetector:
             return
         optimize = getattr(self.model, "optimize_for_inference", None)
         if callable(optimize):
-            logger.info("Optimizing RF-DETR model for inference")
+            logger.debug("Optimizing RF-DETR model for inference")
             if self.optimize_batch_size:
                 try:
                     optimize(batch_size=self.optimize_batch_size)
@@ -170,7 +170,7 @@ class RFDETRDetector:
             optimize()
 
     def _load_model(self):
-        logger.info("Loading RF-DETR model: %s", self.model_path)
+        logger.debug("Loading RF-DETR model: %s", self.model_path)
         try:
             from rfdetr import RFDETR
 
