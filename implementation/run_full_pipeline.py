@@ -99,6 +99,12 @@ def parse_args():
         help="Read videos directly and run RF-DETR batch inference across cameras without saving frames.",
     )
     parser.add_argument("--frame-stride", type=int, default=1)
+    parser.add_argument(
+        "--video-batch-frames",
+        type=int,
+        default=1,
+        help="For direct video inference, batch this many sampled frame indices together. Batch images = cameras * video_batch_frames.",
+    )
     parser.add_argument("--resize-width", type=int, default=0)
     parser.add_argument("--max-frames", type=int, default=0)
 
@@ -214,6 +220,8 @@ def main():
             args.exclude_count_cameras,
             "--frame-stride",
             str(args.frame_stride),
+            "--batch-frame-groups",
+            str(args.video_batch_frames),
             "--max-frames",
             str(args.max_frames),
         ]

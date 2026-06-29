@@ -155,6 +155,55 @@ def append_rows(
     )
 
 
+def process_pending_batch(
+    *,
+    detector: RFDETRDetector,
+    pending_frames: List[Tuple[str, str, str, int, object]],
+    predict_conf: float,
+    args: argparse.Namespace,
+    max_batch: int,
+    per_image_rows: List[Dict[str, object]],
+    detection_rows: List[Dict[str, object]],
+    details: List[Dict[str, object]],
+) -> float:
+    if not pending_frames:
+        return 0.0
+
+    frames_rgb = [item[4] for item in pending_frames]
+    start = time.perf_counter()
+    batch_dets = detector.predict_batch_rgb(frames_rgb, predict_conf)
+    batch_latency_ms = (time.perf_counter() - start) * 1000.0
+    per_image_latency_ms = batch_latency_ms / max(len(batch_dets), 1)
+
+    for (event, event_id, camera, frame_idx, _), dets in zip(pending_frames, batch_dets):
+        dets = postprocess_rf(dets, args)
+        image_name = f"{camera}_{event}_frame_{frame_idx:06d}.jpg"
+        append_rows(
+            image_name=image_name,
+            event_id=event_id,
+            camera=camera,
+            model=args.model,
+            detections=dets,
+            latency_ms=per_image_latency_ms,
+            num_classes=args.num_classes,
+            per_image_rows=per_image_rows,
+            detection_rows=detection_rows,
+            details=details,
+        )
+
+    first_event, _, _, first_frame_idx, _ = pending_frames[0]
+    if first_frame_idx < args.frame_stride * max(args.batch_frame_groups, 1) or first_frame_idx % (args.frame_stride * 100) == 0:
+        logger.info(
+            "%s frame=%06d batch_images=%d batch=%.2fms per_image=%.2fms",
+            first_event,
+            first_frame_idx,
+            len(batch_dets),
+            batch_latency_ms,
+            per_image_latency_ms,
+        )
+    return float(len(batch_dets))
+
+
 def run(args: argparse.Namespace) -> None:
     source = Path(args.source)
     output_dir = Path(args.output_dir)
@@ -172,7 +221,8 @@ def run(args: argparse.Namespace) -> None:
         "rf_detr_large": (args.rf_large_model, "large"),
         "rf_detr_large_aug": (args.rf_large_aug_model, "large"),
     }[args.model]
-    max_batch = max(len(items) for items in groups.values())
+    camera_batch = max(len(items) for items in groups.values())
+    max_batch = camera_batch * max(args.batch_frame_groups, 1)
     detector = RFDETRDetector(model_path, variant=variant, optimize_batch_size=max_batch)
     args.loaded_class_thresholds = load_class_thresholds(args.class_thresholds)
     predict_conf = threshold_floor(args.rf_conf, args.loaded_class_thresholds)
@@ -195,56 +245,63 @@ def run(args: argparse.Namespace) -> None:
             total_frames = min(frame_counts) if frame_counts else 0
             if args.max_frames > 0:
                 total_frames = min(total_frames, args.max_frames)
-            logger.info("Event %s: %d cameras, %d frames, stride=%d", event, len(caps), total_frames, args.frame_stride)
+            logger.info(
+                "Event %s: %d cameras, %d frames, stride=%d, batch_frame_groups=%d, optimize_batch=%d",
+                event,
+                len(caps),
+                total_frames,
+                args.frame_stride,
+                args.batch_frame_groups,
+                max_batch,
+            )
 
+            pending_frames: List[Tuple[str, str, str, int, object]] = []
+            pending_groups = 0
             for frame_idx in range(total_frames):
-                frames_rgb = []
-                cameras = []
                 valid = True
+                sampled_frames = []
                 for camera, _, cap in caps:
                     ret, frame_bgr = cap.read()
                     if not ret:
                         valid = False
                         break
                     if frame_idx % args.frame_stride == 0:
-                        frames_rgb.append(cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB))
-                        cameras.append(camera)
+                        sampled_frames.append((camera, cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)))
                 if not valid:
                     break
                 if frame_idx % args.frame_stride != 0:
                     continue
 
-                start = time.perf_counter()
-                batch_dets = detector.predict_batch_rgb(frames_rgb, predict_conf)
-                batch_latency_ms = (time.perf_counter() - start) * 1000.0
-                per_image_latency_ms = batch_latency_ms / max(len(batch_dets), 1)
                 event_id = f"{event}_frame_{frame_idx:06d}"
-                total_sampled += len(batch_dets)
+                for camera, frame_rgb in sampled_frames:
+                    pending_frames.append((event, event_id, camera, frame_idx, frame_rgb))
+                pending_groups += 1
 
-                for camera, dets in zip(cameras, batch_dets):
-                    dets = postprocess_rf(dets, args)
-                    image_name = f"{camera}_{event}_frame_{frame_idx:06d}.jpg"
-                    append_rows(
-                        image_name=image_name,
-                        event_id=event_id,
-                        camera=camera,
-                        model=args.model,
-                        detections=dets,
-                        latency_ms=per_image_latency_ms,
-                        num_classes=args.num_classes,
+                if pending_groups >= max(args.batch_frame_groups, 1):
+                    total_sampled += process_pending_batch(
+                        detector=detector,
+                        pending_frames=pending_frames,
+                        predict_conf=predict_conf,
+                        args=args,
+                        max_batch=max_batch,
                         per_image_rows=per_image_rows,
                         detection_rows=detection_rows,
                         details=details,
                     )
+                    pending_frames = []
+                    pending_groups = 0
 
-                if total_sampled <= max_batch or frame_idx % (args.frame_stride * 100) == 0:
-                    logger.info(
-                        "%s frame=%06d batch=%.2fms per_image=%.2fms",
-                        event,
-                        frame_idx,
-                        batch_latency_ms,
-                        per_image_latency_ms,
-                    )
+            if pending_frames:
+                total_sampled += process_pending_batch(
+                    detector=detector,
+                    pending_frames=pending_frames,
+                    predict_conf=predict_conf,
+                    args=args,
+                    max_batch=max_batch,
+                    per_image_rows=per_image_rows,
+                    detection_rows=detection_rows,
+                    details=details,
+                )
         finally:
             for _, _, cap in caps:
                 cap.release()
@@ -302,6 +359,12 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated cameras to exclude from camera-fused counting, e.g. cam2.",
     )
     parser.add_argument("--frame-stride", type=int, default=3)
+    parser.add_argument(
+        "--batch-frame-groups",
+        type=int,
+        default=1,
+        help="Number of sampled frame indices to batch together. Batch images = cameras * batch_frame_groups.",
+    )
     parser.add_argument("--max-frames", type=int, default=0)
     return parser.parse_args()
 

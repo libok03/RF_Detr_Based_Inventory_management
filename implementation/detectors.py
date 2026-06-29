@@ -190,17 +190,6 @@ class RFDETRDetector:
 
     def _load_model(self):
         logger.debug("Loading RF-DETR model: %s", self.model_path)
-        try:
-            from rfdetr import RFDETR
-
-            if hasattr(RFDETR, "from_checkpoint"):
-                try:
-                    return RFDETR.from_checkpoint(self.model_path, num_classes=self.num_classes)
-                except TypeError:
-                    return RFDETR.from_checkpoint(self.model_path)
-        except Exception as exc:
-            logger.debug("RFDETR.from_checkpoint failed: %s", exc)
-
         class_names = {
             "base": "RFDETRBase",
             "large": "RFDETRLarge",
@@ -225,10 +214,23 @@ class RFDETRDetector:
                     model.load(self.model_path)
                     return model
                 raise
+        except Exception as direct_exc:
+            logger.debug("Direct RF-DETR class load failed: %s", direct_exc)
+
+        try:
+            from rfdetr import RFDETR
+
+            if hasattr(RFDETR, "from_checkpoint"):
+                try:
+                    return RFDETR.from_checkpoint(self.model_path, num_classes=self.num_classes)
+                except TypeError:
+                    return RFDETR.from_checkpoint(self.model_path)
         except Exception as exc:
             raise RuntimeError(
                 f"Failed to load RF-DETR model. model={self.model_path}, variant={self.variant}, error={exc}"
             ) from exc
+
+        raise RuntimeError(f"Failed to load RF-DETR model. model={self.model_path}, variant={self.variant}")
 
     def predict(self, image_path: Path, conf: float) -> List[Detection]:
         image_bgr = cv2.imread(str(image_path))
