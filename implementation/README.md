@@ -112,6 +112,8 @@ Additional outputs:
 
 - `competition_submission.csv`: long format with `event_number`, `event_id`, `action`, `item_name`, `class_id`, `quantity_after_event`, `item_price`, and `total_inventory_value`.
 - `competition_submission_kr.csv`: Korean long format with the required fields: item name, event number, purchase/return action, quantity after event, and total inventory value.
+- `competition_submission_kr_cp949.csv`: Korean CSV encoded for Windows Excel.
+- `competition_submission_kr.tsv`: Korean tab-separated file for spreadsheet import.
 - `competition_submission_wide.csv`: one row per event with all product quantities as columns.
 
 `action` is inferred by comparing the current fused inventory vector with the previous event vector:
@@ -138,7 +140,5 @@ Current RF-DETR default run:
 - Same-class duplicate suppression: `duplicate_center_threshold=0.85`, `duplicate_conf_ratio=0.65`.
 - Frame extraction: `frame_stride=1`.
 - Temporal filtering: `window=5`, `min_appear=5`.
-
-The same-class duplicate suppression removes a lower-confidence same-class box only when its center is very close to a higher-confidence box and its confidence is clearly lower. This is intended to reduce split detections of one product while avoiding removal of adjacent products with similar confidence.
 
 The current `inventory_pipeline.py` applies image-level count and camera max fusion. Temporal `window/min_appear` smoothing should be applied on top of frame-level outputs when continuous video sequences are used.

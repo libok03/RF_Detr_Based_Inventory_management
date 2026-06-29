@@ -130,10 +130,17 @@ def build_korean_rows(long_rows: List[dict]) -> List[dict]:
     return rows
 
 
-def write_csv(path: Path, rows: List[dict], fieldnames: List[str]) -> None:
+def write_csv(
+    path: Path,
+    rows: List[dict],
+    fieldnames: List[str],
+    *,
+    encoding: str = "utf-8-sig",
+    delimiter: str = ",",
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", newline="", encoding="utf-8-sig") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
+    with path.open("w", newline="", encoding=encoding) as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames, delimiter=delimiter)
         writer.writeheader()
         writer.writerows(rows)
 
@@ -144,6 +151,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", default=None)
     parser.add_argument("--long-name", default="competition_submission.csv")
     parser.add_argument("--korean-name", default="competition_submission_kr.csv")
+    parser.add_argument("--korean-cp949-name", default="competition_submission_kr_cp949.csv")
+    parser.add_argument("--korean-tsv-name", default="competition_submission_kr.tsv")
     parser.add_argument("--wide-name", default="competition_submission_wide.csv")
     parser.add_argument(
         "--include-zero-items",
@@ -181,25 +190,43 @@ def main() -> None:
 
     long_path = output_dir / args.long_name
     korean_path = output_dir / args.korean_name
+    korean_cp949_path = output_dir / args.korean_cp949_name
+    korean_tsv_path = output_dir / args.korean_tsv_name
     wide_path = output_dir / args.wide_name
     write_csv(long_path, long_rows, long_fields)
+    korean_rows = build_korean_rows(long_rows)
+    korean_fields = [
+        "이벤트 번호",
+        "event_id",
+        "구매/반환 여부",
+        "품목명",
+        "class_id",
+        "이벤트 발생 후 상품별 재고 수량",
+        "상품 가격",
+        "이벤트 발생 후 총 재고 금액",
+    ]
     write_csv(
         korean_path,
-        build_korean_rows(long_rows),
-        [
-            "이벤트 번호",
-            "event_id",
-            "구매/반환 여부",
-            "품목명",
-            "class_id",
-            "이벤트 발생 후 상품별 재고 수량",
-            "상품 가격",
-            "이벤트 발생 후 총 재고 금액",
-        ],
+        korean_rows,
+        korean_fields,
+    )
+    write_csv(
+        korean_cp949_path,
+        korean_rows,
+        korean_fields,
+        encoding="cp949",
+    )
+    write_csv(
+        korean_tsv_path,
+        korean_rows,
+        korean_fields,
+        delimiter="\t",
     )
     write_csv(wide_path, wide_rows, wide_fields)
     print(long_path)
     print(korean_path)
+    print(korean_cp949_path)
+    print(korean_tsv_path)
     print(wide_path)
 
 
