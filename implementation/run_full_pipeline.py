@@ -84,6 +84,27 @@ def write_timing(output_root: Path, timing: dict) -> None:
         writer.writerow(timing)
 
 
+def make_submission_csv(repo_root: Path, inventory_dir: Path, use_temporal: bool) -> float:
+    temporal_path = inventory_dir / "camera_fused_counts_temporal.csv"
+    raw_path = inventory_dir / "camera_fused_counts.csv"
+    fused_path = temporal_path if use_temporal and temporal_path.exists() else raw_path
+    if not fused_path.exists():
+        logger.warning("Skipping submission CSV generation; fused count file not found: %s", fused_path)
+        return 0.0
+
+    return run_command(
+        [
+            sys.executable,
+            str(repo_root / "implementation" / "make_submission_csv.py"),
+            "--input",
+            str(fused_path),
+            "--output-dir",
+            str(inventory_dir),
+            "--include-zero-items",
+        ]
+    )
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Run frame extraction, detection/counting, camera fusion, and temporal filtering in one command."
@@ -174,6 +195,7 @@ def main():
     frame_seconds = 0.0
     inference_seconds = 0.0
     temporal_seconds = 0.0
+    submission_seconds = 0.0
     video_seconds = args.rtf_video_seconds
 
     source_has_videos = source_contains_videos(source, args.recursive)
@@ -376,6 +398,8 @@ def main():
         ]
         temporal_seconds = run_command(temporal_cmd)
 
+    submission_seconds = make_submission_csv(repo_root, inventory_dir, not args.skip_temporal_filter)
+
     total_seconds = time.perf_counter() - pipeline_start
     timing = {
         "source": str(source),
@@ -396,6 +420,7 @@ def main():
         "frame_extract_seconds": round(frame_seconds, 6),
         "inference_and_count_seconds": round(inference_seconds, 6),
         "temporal_filter_seconds": round(temporal_seconds, 6),
+        "submission_csv_seconds": round(submission_seconds, 6),
         "total_seconds": round(total_seconds, 6),
         "event_video_seconds": round(video_seconds, 6),
         "rtf": round(total_seconds / video_seconds, 6) if video_seconds > 0 else "",
@@ -404,11 +429,12 @@ def main():
 
     logger.info("Full pipeline finished. Outputs: %s", inventory_dir.resolve())
     logger.info(
-        "Timing: total=%.2fs frame=%.2fs inference/count=%.2fs temporal=%.2fs video=%.2fs RTF=%s",
+        "Timing: total=%.2fs frame=%.2fs inference/count=%.2fs temporal=%.2fs submission=%.2fs video=%.2fs RTF=%s",
         total_seconds,
         frame_seconds,
         inference_seconds,
         temporal_seconds,
+        submission_seconds,
         video_seconds,
         timing["rtf"],
     )

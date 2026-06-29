@@ -106,6 +106,30 @@ Additional outputs:
 - `per_image_counts_temporal.csv`: temporally filtered frame-level count vector.
 - `camera_fused_counts_temporal.csv`: camera-fused counts after temporal filtering.
 
+## Competition Submission CSV
+
+`run_full_pipeline.py` also writes submission-format CSV files in the inventory output folder:
+
+- `competition_submission.csv`: long format with `event_number`, `event_id`, `action`, `item_name`, `class_id`, `quantity_after_event`, `item_price`, and `total_inventory_value`.
+- `competition_submission_kr.csv`: Korean long format with the required fields: item name, event number, purchase/return action, quantity after event, and total inventory value.
+- `competition_submission_wide.csv`: one row per event with all product quantities as columns.
+
+`action` is inferred by comparing the current fused inventory vector with the previous event vector:
+
+- `purchase`: total inventory decreased.
+- `return`: total inventory increased.
+- `no_change`: total inventory did not change.
+- `initial`: first event row.
+
+To regenerate submission files from an existing fused count CSV:
+
+```bash
+python implementation/make_submission_csv.py \
+  --input implementation_outputs/sample_allcams_v5_b/inventory/camera_fused_counts_temporal.csv \
+  --output-dir implementation_outputs/sample_allcams_v5_b/inventory \
+  --include-zero-items
+```
+
 ## Current Recommended Thresholds
 
 Current RF-DETR default run:
