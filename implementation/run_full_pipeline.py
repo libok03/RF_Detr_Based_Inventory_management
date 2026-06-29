@@ -105,6 +105,31 @@ def make_submission_csv(repo_root: Path, inventory_dir: Path, use_temporal: bool
     )
 
 
+def make_visualization_video(repo_root: Path, source: Path, inventory_dir: Path, args: argparse.Namespace) -> float:
+    detections_path = inventory_dir / "detections.csv"
+    if not detections_path.exists():
+        logger.warning("Skipping visualization video generation; detections file not found: %s", detections_path)
+        return 0.0
+
+    cmd = [
+        sys.executable,
+        str(repo_root / "implementation" / "visualize_detection_video.py"),
+        "--source",
+        str(source),
+        "--detections",
+        str(detections_path),
+        "--output-dir",
+        str(inventory_dir / "visualized_videos"),
+    ]
+    if args.recursive:
+        cmd.append("--recursive")
+    if args.visualization_max_frames > 0:
+        cmd.extend(["--max-frames", str(args.visualization_max_frames)])
+    if args.no_visualization_hold:
+        cmd.append("--no-hold-detections")
+    return run_command(cmd)
+
+
 def parse_args():
     parser = argparse.ArgumentParser(
         description="Run frame extraction, detection/counting, camera fusion, and temporal filtering in one command."
@@ -172,6 +197,22 @@ def parse_args():
     parser.add_argument("--window", type=int, default=5)
     parser.add_argument("--min-appear", type=int, default=5)
     parser.add_argument(
+        "--make-visualization-video",
+        action="store_true",
+        help="Render detections.csv back onto source videos after inference.",
+    )
+    parser.add_argument(
+        "--visualization-max-frames",
+        type=int,
+        default=0,
+        help="Limit visualization video rendering to this many frames per camera. 0 means all frames.",
+    )
+    parser.add_argument(
+        "--no-visualization-hold",
+        action="store_true",
+        help="Draw boxes only on sampled inference frames instead of holding the last detection between sampled frames.",
+    )
+    parser.add_argument(
         "--rtf-video-seconds",
         type=float,
         default=0.0,
@@ -196,6 +237,7 @@ def main():
     inference_seconds = 0.0
     temporal_seconds = 0.0
     submission_seconds = 0.0
+    visualization_seconds = 0.0
     video_seconds = args.rtf_video_seconds
 
     source_has_videos = source_contains_videos(source, args.recursive)
@@ -399,6 +441,8 @@ def main():
         temporal_seconds = run_command(temporal_cmd)
 
     submission_seconds = make_submission_csv(repo_root, inventory_dir, not args.skip_temporal_filter)
+    if args.make_visualization_video:
+        visualization_seconds = make_visualization_video(repo_root, source, inventory_dir, args)
 
     total_seconds = time.perf_counter() - pipeline_start
     timing = {
@@ -421,6 +465,7 @@ def main():
         "inference_and_count_seconds": round(inference_seconds, 6),
         "temporal_filter_seconds": round(temporal_seconds, 6),
         "submission_csv_seconds": round(submission_seconds, 6),
+        "visualization_video_seconds": round(visualization_seconds, 6),
         "total_seconds": round(total_seconds, 6),
         "event_video_seconds": round(video_seconds, 6),
         "rtf": round(total_seconds / video_seconds, 6) if video_seconds > 0 else "",
@@ -429,12 +474,13 @@ def main():
 
     logger.info("Full pipeline finished. Outputs: %s", inventory_dir.resolve())
     logger.info(
-        "Timing: total=%.2fs frame=%.2fs inference/count=%.2fs temporal=%.2fs submission=%.2fs video=%.2fs RTF=%s",
+        "Timing: total=%.2fs frame=%.2fs inference/count=%.2fs temporal=%.2fs submission=%.2fs visualization=%.2fs video=%.2fs RTF=%s",
         total_seconds,
         frame_seconds,
         inference_seconds,
         temporal_seconds,
         submission_seconds,
+        visualization_seconds,
         video_seconds,
         timing["rtf"],
     )

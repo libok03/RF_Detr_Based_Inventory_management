@@ -132,6 +132,28 @@ python implementation/make_submission_csv.py \
   --include-zero-items
 ```
 
+## Detection Visualization Videos
+
+To render `detections.csv` back onto the original camera videos:
+
+```bash
+python implementation/visualize_detection_video.py \
+  --source /path/to/4.TestVideo_Sample \
+  --detections implementation_outputs/final_submission_v5_b_stride3/inventory/detections.csv \
+  --output-dir implementation_outputs/final_submission_v5_b_stride3/inventory/visualized_videos \
+  --recursive
+```
+
+Or enable it at the end of the full pipeline:
+
+```bash
+python implementation/run_full_pipeline.py \
+  ... \
+  --make-visualization-video
+```
+
+The visualized mp4 files are for inspection and presentation. Leave `--make-visualization-video` off when measuring official RTF.
+
 ## Current Recommended Thresholds
 
 Current RF-DETR default run:
