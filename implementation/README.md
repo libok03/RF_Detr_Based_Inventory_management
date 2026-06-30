@@ -18,6 +18,36 @@ python implementation/frame_extract.py \
 
 Run frame extraction, detection/counting, camera fusion, and temporal filtering together:
 
+### Final Baseline
+
+Current baseline for the sample multi-camera video submission run:
+
+```bash
+python implementation/run_full_pipeline.py \
+  --source ~/Dataset/4.TestVideo_Sample \
+  --direct-video-inference \
+  --model rf_detr_large_aug \
+  --rf-large-aug-model ~/RF-DETR/output_aug_v5_b/checkpoint_best_ema.pth \
+  --class-thresholds implementation_outputs/rf_penalty_video_sweep_v5_b_with_cam2/best_rf_class_thresholds.json \
+  --rf-conf 0.60 \
+  --single-nms \
+  --nms-iou 0.40 \
+  --duplicate-center-threshold 0.85 \
+  --duplicate-conf-ratio 0.70 \
+  --containment-threshold 0.70 \
+  --containment-conf-ratio 0.95 \
+  --recursive \
+  --frame-stride 3 \
+  --video-batch-frames 1 \
+  --window 5 \
+  --min-appear 5 \
+  --output-root implementation_outputs/final_submission_v5_b_stride3
+```
+
+This run reads mp4 files directly and performs RF-DETR inference, class-wise thresholding, NMS, duplicate suppression, temporal filtering, camera max fusion, and submission CSV generation in one command.
+
+### Generic Example
+
 ```bash
 python implementation/run_full_pipeline.py \
   --source /path/to/4.TestVideo_Sample \
@@ -156,11 +186,16 @@ The visualized mp4 files are for inspection and presentation. Leave `--make-visu
 
 ## Current Recommended Thresholds
 
-Current RF-DETR default run:
+Current final baseline:
 
-- RF-DETR Large Aug: `rf_conf=0.45`, `single_nms=True`, `nms_iou=0.55`.
-- Same-class duplicate suppression: `duplicate_center_threshold=0.85`, `duplicate_conf_ratio=0.65`.
-- Frame extraction: `frame_stride=1`.
+- RF-DETR Large Aug v5_b checkpoint: `~/RF-DETR/output_aug_v5_b/checkpoint_best_ema.pth`.
+- Per-class RF confidence thresholds: `implementation_outputs/rf_penalty_video_sweep_v5_b_with_cam2/best_rf_class_thresholds.json`.
+- RF confidence floor: `rf_conf=0.60`.
+- Single-model NMS: `nms_iou=0.40`.
+- Same-class duplicate suppression: `duplicate_center_threshold=0.85`, `duplicate_conf_ratio=0.70`.
+- Containment duplicate suppression: `containment_threshold=0.70`, `containment_conf_ratio=0.95`.
+- Direct video inference: `direct_video_inference=True`, `video_batch_frames=1`.
+- Frame sampling: `frame_stride=3`.
 - Temporal filtering: `window=5`, `min_appear=5`.
 
-The current `inventory_pipeline.py` applies image-level count and camera max fusion. Temporal `window/min_appear` smoothing should be applied on top of frame-level outputs when continuous video sequences are used.
+The current pipeline applies image-level count extraction, camera max fusion, and temporal `window/min_appear` smoothing. Same-class duplicate suppression reduces split detections of one product, while containment duplicate suppression removes lower-confidence boxes mostly contained by a higher-confidence same-class box.
