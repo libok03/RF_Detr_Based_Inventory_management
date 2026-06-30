@@ -25,15 +25,53 @@ def font(size: int, bold: bool = False):
     return ImageFont.load_default()
 
 
+def named_module_roots(model):
+    seen = set()
+    queue = [("root", model)]
+    attr_names = [
+        "model",
+        "module",
+        "nn_model",
+        "net",
+        "network",
+        "detector",
+        "detr",
+        "model_ema",
+        "ema",
+        "_model",
+    ]
+
+    while queue:
+        prefix, obj = queue.pop(0)
+        obj_id = id(obj)
+        if obj_id in seen:
+            continue
+        seen.add(obj_id)
+
+        if hasattr(obj, "named_modules") and callable(getattr(obj, "named_modules")):
+            yield prefix, obj
+            continue
+
+        for attr in attr_names:
+            if not hasattr(obj, attr):
+                continue
+            try:
+                child = getattr(obj, attr)
+            except Exception:
+                continue
+            if child is not None and id(child) not in seen:
+                queue.append((f"{prefix}.{attr}", child))
+
+
 def find_deformable_attention_modules(model) -> List[Tuple[str, torch.nn.Module]]:
     modules = []
-    torch_model = getattr(model, "model", model)
-    for name, module in torch_model.named_modules():
-        has_offsets = hasattr(module, "sampling_offsets")
-        has_weights = hasattr(module, "attention_weights")
-        class_name = module.__class__.__name__.lower()
-        if has_offsets and has_weights and "deform" in class_name:
-            modules.append((name, module))
+    for root_name, torch_model in named_module_roots(model):
+        for name, module in torch_model.named_modules():
+            has_offsets = hasattr(module, "sampling_offsets")
+            has_weights = hasattr(module, "attention_weights")
+            class_name = module.__class__.__name__.lower()
+            if has_offsets and has_weights and "deform" in class_name:
+                modules.append((f"{root_name}.{name}", module))
     return modules
 
 
