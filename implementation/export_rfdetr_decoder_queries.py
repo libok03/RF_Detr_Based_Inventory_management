@@ -200,6 +200,14 @@ def write_query_summary(path: Path, query_matrix: np.ndarray) -> None:
             writer.writerow([idx, norms[idx], abs_mean[idx], means[idx], mins[idx], maxs[idx]])
 
 
+def write_query_matrix_csv(path: Path, query_matrix: np.ndarray) -> None:
+    with path.open("w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerow(["query_id"] + [f"dim_{idx}" for idx in range(query_matrix.shape[1])])
+        for query_id, row in enumerate(query_matrix):
+            writer.writerow([query_id] + row.tolist())
+
+
 def write_detection_csv(path: Path, detections) -> None:
     with path.open("w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
@@ -219,6 +227,7 @@ def main():
     parser.add_argument("--output-dir", default="implementation_outputs/rfdetr_decoder_queries")
     parser.add_argument("--list-modules", action="store_true")
     parser.add_argument("--module-index", default="all", help="'all', 'last', or a comma-separated index list")
+    parser.add_argument("--no-summary", action="store_true")
     args = parser.parse_args()
 
     os.environ["RFDETR_OPTIMIZE"] = "0"
@@ -271,15 +280,23 @@ def main():
         for handle in handles:
             handle.remove()
 
-    write_detection_csv(output_dir / f"{image_path.stem}_detections.csv", detections)
-
     if not captures:
         raise RuntimeError("Decoder modules were found, but no query-shaped tensors were captured.")
 
     manifest_path = output_dir / f"{image_path.stem}_decoder_query_manifest.csv"
     with manifest_path.open("w", newline="", encoding="utf-8") as manifest_file:
         manifest = csv.writer(manifest_file)
-        manifest.writerow(["module_index", "module_name", "tensor_index", "tensor_shape", "npy_path", "summary_csv_path"])
+        manifest.writerow(
+            [
+                "module_index",
+                "module_name",
+                "tensor_index",
+                "tensor_shape",
+                "npy_path",
+                "decoder_values_csv_path",
+                "summary_csv_path",
+            ]
+        )
 
         for module_index in selected_indices:
             if module_index not in captures:
@@ -290,9 +307,12 @@ def main():
             for tensor_index, tensor in enumerate(captures[module_index]):
                 query_matrix = to_query_matrix(tensor, args.num_queries)
                 npy_path = output_dir / f"{image_path.stem}_{module_safe}_tensor{tensor_index}_queries.npy"
-                csv_path = output_dir / f"{image_path.stem}_{module_safe}_tensor{tensor_index}_summary.csv"
+                values_csv_path = output_dir / f"{image_path.stem}_{module_safe}_tensor{tensor_index}_decoder_values.csv"
+                summary_csv_path = output_dir / f"{image_path.stem}_{module_safe}_tensor{tensor_index}_summary.csv"
                 np.save(npy_path, query_matrix)
-                write_query_summary(csv_path, query_matrix)
+                write_query_matrix_csv(values_csv_path, query_matrix)
+                if not args.no_summary:
+                    write_query_summary(summary_csv_path, query_matrix)
                 manifest.writerow(
                     [
                         module_index,
@@ -300,14 +320,16 @@ def main():
                         tensor_index,
                         "x".join(str(dim) for dim in tuple(tensor.shape)),
                         npy_path,
-                        csv_path,
+                        values_csv_path,
+                        "" if args.no_summary else summary_csv_path,
                     ]
                 )
                 print(f"saved: {npy_path} shape={query_matrix.shape}")
-                print(f"saved: {csv_path}")
+                print(f"saved: {values_csv_path}")
+                if not args.no_summary:
+                    print(f"saved: {summary_csv_path}")
 
     print(f"saved: {manifest_path}")
-    print(f"saved: {output_dir / (image_path.stem + '_detections.csv')}")
 
 
 if __name__ == "__main__":
