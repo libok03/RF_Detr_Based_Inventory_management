@@ -81,6 +81,8 @@ def find_vit_block_modules(model) -> List[Tuple[str, torch.nn.Module]]:
     def is_vit_layer(name: str, module: torch.nn.Module) -> bool:
         lname = name.lower()
         cname = module.__class__.__name__.lower()
+        if "layer_scale" in lname or "layerscale" in cname:
+            return False
         return (
             re.search(r"encoder\.layer\.\d+$", lname) is not None
             or ("dinov2" in cname and "layer" in cname)
