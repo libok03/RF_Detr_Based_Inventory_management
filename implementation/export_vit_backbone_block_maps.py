@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 from pathlib import Path
 from typing import List, Tuple
 
@@ -77,19 +78,32 @@ def named_module_roots(model):
 
 
 def find_vit_block_modules(model) -> List[Tuple[str, torch.nn.Module]]:
+    def is_vit_layer(name: str, module: torch.nn.Module) -> bool:
+        lname = name.lower()
+        cname = module.__class__.__name__.lower()
+        return (
+            re.search(r"encoder\.layer\.\d+$", lname) is not None
+            or ("dinov2" in cname and "layer" in cname)
+            or "withregisterslayer" in cname
+            or (
+                hasattr(module, "attention")
+                and hasattr(module, "mlp")
+                and hasattr(module, "norm1")
+                and hasattr(module, "norm2")
+            )
+            or (
+                hasattr(module, "attn")
+                and hasattr(module, "mlp")
+                and (hasattr(module, "norm1") or hasattr(module, "ls1"))
+            )
+        )
+
     candidates: List[Tuple[str, torch.nn.Module]] = []
     for root_name, torch_model in named_module_roots(model):
         for name, module in torch_model.named_modules():
             lname = name.lower()
-            cname = module.__class__.__name__.lower()
             is_backbone = "backbone" in lname or "dinov2" in lname or "encoder" in lname
-            is_block = (
-                cname in {"block", "nestedtensorblock"}
-                or cname.endswith("block")
-                or "dinoblock" in cname
-                or (hasattr(module, "attn") and hasattr(module, "mlp") and (hasattr(module, "norm1") or hasattr(module, "ls1")))
-            )
-            if is_backbone and is_block:
+            if is_backbone and is_vit_layer(name, module):
                 candidates.append((f"{root_name}.{name}", module))
     if candidates:
         return candidates
@@ -97,13 +111,7 @@ def find_vit_block_modules(model) -> List[Tuple[str, torch.nn.Module]]:
     # Fallback for wrappers whose module names do not include "backbone".
     for root_name, torch_model in named_module_roots(model):
         for name, module in torch_model.named_modules():
-            cname = module.__class__.__name__.lower()
-            if (
-                cname in {"block", "nestedtensorblock"}
-                or cname.endswith("block")
-                or "dinoblock" in cname
-                or (hasattr(module, "attn") and hasattr(module, "mlp") and (hasattr(module, "norm1") or hasattr(module, "ls1")))
-            ):
+            if is_vit_layer(name, module):
                 candidates.append((f"{root_name}.{name}", module))
     return candidates
 
@@ -142,7 +150,7 @@ def tensor_from_output(output):
 
 def infer_grid_from_tokens(num_tokens: int, image_h: int, image_w: int):
     candidates = []
-    for drop in [0, 1, 2, 4]:
+    for drop in [0, 1, 2, 4, 5, 8]:
         n = num_tokens - drop
         if n <= 0:
             continue
