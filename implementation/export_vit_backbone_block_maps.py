@@ -26,6 +26,9 @@ def named_module_roots(model):
         "detector",
         "detr",
         "backbone",
+        "encoder",
+        "body",
+        "features",
         "_model",
     ]
     while queue:
@@ -36,6 +39,19 @@ def named_module_roots(model):
         if hasattr(obj, "named_modules") and callable(getattr(obj, "named_modules")):
             yield prefix, obj
             continue
+
+        if isinstance(obj, dict):
+            for key, child in obj.items():
+                if child is not None and id(child) not in seen:
+                    queue.append((f"{prefix}.{key}", child))
+            continue
+
+        if isinstance(obj, (list, tuple)):
+            for idx, child in enumerate(obj):
+                if child is not None and id(child) not in seen:
+                    queue.append((f"{prefix}.{idx}", child))
+            continue
+
         for attr in attr_names:
             if not hasattr(obj, attr):
                 continue
@@ -46,6 +62,19 @@ def named_module_roots(model):
             if child is not None and id(child) not in seen:
                 queue.append((f"{prefix}.{attr}", child))
 
+        try:
+            attrs = vars(obj)
+        except TypeError:
+            attrs = {}
+        for attr, child in attrs.items():
+            if attr.startswith("__"):
+                continue
+            if child is None or id(child) in seen:
+                continue
+            if isinstance(child, (str, bytes, int, float, bool, Path)):
+                continue
+            queue.append((f"{prefix}.{attr}", child))
+
 
 def find_vit_block_modules(model) -> List[Tuple[str, torch.nn.Module]]:
     candidates: List[Tuple[str, torch.nn.Module]] = []
@@ -54,7 +83,12 @@ def find_vit_block_modules(model) -> List[Tuple[str, torch.nn.Module]]:
             lname = name.lower()
             cname = module.__class__.__name__.lower()
             is_backbone = "backbone" in lname or "dinov2" in lname or "encoder" in lname
-            is_block = cname in {"block", "nestedtensorblock"} or cname.endswith("block")
+            is_block = (
+                cname in {"block", "nestedtensorblock"}
+                or cname.endswith("block")
+                or "dinoblock" in cname
+                or (hasattr(module, "attn") and hasattr(module, "mlp") and (hasattr(module, "norm1") or hasattr(module, "ls1")))
+            )
             if is_backbone and is_block:
                 candidates.append((f"{root_name}.{name}", module))
     if candidates:
@@ -64,9 +98,30 @@ def find_vit_block_modules(model) -> List[Tuple[str, torch.nn.Module]]:
     for root_name, torch_model in named_module_roots(model):
         for name, module in torch_model.named_modules():
             cname = module.__class__.__name__.lower()
-            if cname in {"block", "nestedtensorblock"} or cname.endswith("block"):
+            if (
+                cname in {"block", "nestedtensorblock"}
+                or cname.endswith("block")
+                or "dinoblock" in cname
+                or (hasattr(module, "attn") and hasattr(module, "mlp") and (hasattr(module, "norm1") or hasattr(module, "ls1")))
+            ):
                 candidates.append((f"{root_name}.{name}", module))
     return candidates
+
+
+def list_interesting_modules(model, limit: int = 200):
+    rows = []
+    for root_name, torch_model in named_module_roots(model):
+        for name, module in torch_model.named_modules():
+            full_name = f"{root_name}.{name}"
+            lname = full_name.lower()
+            cname = module.__class__.__name__
+            if any(key in lname for key in ["backbone", "dino", "encoder", "block", "attn"]) or any(
+                key in cname.lower() for key in ["block", "attn", "dino", "backbone"]
+            ):
+                rows.append((full_name, cname))
+                if len(rows) >= limit:
+                    return rows
+    return rows
 
 
 def tensor_from_output(output):
@@ -177,6 +232,9 @@ def main():
     detector = RFDETRDetector(args.model, variant=args.variant, num_classes=60)
     blocks = find_vit_block_modules(detector.model)
     if not blocks:
+        print("No ViT/DINO backbone block modules were found. Interesting modules:")
+        for name, class_name in list_interesting_modules(detector.model):
+            print(f"- {name} [{class_name}]")
         raise RuntimeError("No ViT/DINO backbone block modules were found.")
 
     if args.list_blocks:
